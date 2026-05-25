@@ -1,0 +1,8 @@
+{
+  "name": "Stationery Hub",
+  "description": "Nền tảng thương mại điện tử dành cho văn phòng phẩm với đầy đủ tính năng người dùng và quản trị viên.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
