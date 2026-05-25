@@ -165,7 +165,8 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_id  UUID           NOT NULL REFERENCES products (id) ON DELETE RESTRICT,
   product_name VARCHAR(255)  NOT NULL,                    -- snapshot tên lúc đặt
   quantity    INTEGER        NOT NULL CHECK (quantity > 0),
-  unit_price  NUMERIC(12, 0) NOT NULL CHECK (unit_price >= 0)  -- snapshot giá lúc đặt
+  unit_price  NUMERIC(12, 0) NOT NULL CHECK (unit_price >= 0),  -- snapshot giá lúc đặt
+  UNIQUE (order_id, product_id)                           -- mỗi sản phẩm chỉ xuất hiện 1 lần / đơn
 );
 
 COMMENT ON TABLE  order_items              IS 'Chi tiết từng mặt hàng trong đơn hàng';
@@ -210,14 +211,10 @@ END $$;
 CREATE OR REPLACE FUNCTION decrease_product_stock()
 RETURNS TRIGGER AS $$
 BEGIN
+  -- Giảm tồn kho; CHECK (stock >= 0) trên bảng sẽ tự RAISE nếu âm
   UPDATE products
   SET stock = stock - NEW.quantity
   WHERE id = NEW.product_id;
-
-  -- Kiểm tra không để stock âm
-  IF (SELECT stock FROM products WHERE id = NEW.product_id) < 0 THEN
-    RAISE EXCEPTION 'Sản phẩm % không đủ tồn kho', NEW.product_id;
-  END IF;
 
   RETURN NEW;
 END;
@@ -229,12 +226,21 @@ CREATE OR REPLACE TRIGGER trg_order_items_decrease_stock
 
 
 -- ============================================================
--- 10. TRIGGER: hoàn kho khi đơn hàng bị huỷ (status → cancelled)
+-- 10. TRIGGER: quản lý kho khi trạng thái đơn hàng thay đổi
+--     a) Hoàn kho khi chuyển → cancelled
+--     b) Enforce: cancelled là trạng thái cuối (terminal state)
 -- ============================================================
-CREATE OR REPLACE FUNCTION restore_stock_on_cancel()
+CREATE OR REPLACE FUNCTION manage_stock_on_status_change()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- Chỉ hoàn kho khi chuyển sang cancelled
+  -- (b) Chặn đảo ngược từ 'cancelled' sang trạng thái khác
+  IF OLD.status = 'cancelled' AND NEW.status <> 'cancelled' THEN
+    RAISE EXCEPTION
+      'Không thể chuyển đơn hàng từ cancelled sang %. Cancelled là trạng thái cuối.',
+      NEW.status;
+  END IF;
+
+  -- (a) Hoàn kho khi chuyển sang cancelled lần đầu
   IF NEW.status = 'cancelled' AND OLD.status <> 'cancelled' THEN
     UPDATE products p
     SET    stock = stock + oi.quantity
@@ -242,13 +248,40 @@ BEGIN
     WHERE  oi.order_id = NEW.id
       AND  p.id = oi.product_id;
   END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE TRIGGER trg_orders_restore_stock
-  AFTER UPDATE OF status ON orders
-  FOR EACH ROW EXECUTE FUNCTION restore_stock_on_cancel();
+CREATE OR REPLACE TRIGGER trg_orders_manage_stock
+  BEFORE UPDATE OF status ON orders
+  FOR EACH ROW EXECUTE FUNCTION manage_stock_on_status_change();
+
+
+-- ============================================================
+-- 11. TRIGGER: hoàn kho khi đơn hàng bị xoá cứng (hard delete)
+--     ON DELETE CASCADE xoá order_items trước khi trigger này chạy,
+--     nên ta xử lý ở BEFORE DELETE để đọc được items.
+-- ============================================================
+CREATE OR REPLACE FUNCTION restore_stock_on_order_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Chỉ hoàn kho nếu đơn chưa bị huỷ (cancelled đã hoàn kho rồi)
+  IF OLD.status <> 'cancelled' THEN
+    UPDATE products p
+    SET    stock = stock + oi.quantity
+    FROM   order_items oi
+    WHERE  oi.order_id = OLD.id
+      AND  p.id = oi.product_id;
+  END IF;
+
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER trg_orders_restore_stock_on_delete
+  BEFORE DELETE ON orders
+  FOR EACH ROW EXECUTE FUNCTION restore_stock_on_order_delete();
 
 
 -- ============================================================
