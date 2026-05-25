@@ -8,8 +8,8 @@
 -- ----------------------------------------------------------------
 -- 0. Extensions
 -- ----------------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";   -- uuid_generate_v4()
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";    -- gen_random_uuid() (Postgres 13+)
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";     -- for GIN index on product names (ILIKE search)
 
 
 -- ============================================================
@@ -125,9 +125,6 @@ COMMENT ON COLUMN products.is_active  IS 'FALSE = ẩn sản phẩm, không hi�
 CREATE INDEX IF NOT EXISTS idx_products_category  ON products (category_id);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON products (is_active);
 CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON products USING GIN (name gin_trgm_ops);
--- Note: cần extension pg_trgm để dùng GIN index cho ILIKE/full-text
--- Nếu chưa có pg_trgm, thay bằng index thường:
--- CREATE INDEX IF NOT EXISTS idx_products_name ON products (name);
 
 
 -- ============================================================
