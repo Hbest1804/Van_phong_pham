@@ -127,4 +127,12 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  /**
+   * POST /api/v1/auth/logout
+   */
+  logout: () =>
+    request<void>('/auth/logout', {
+      method: 'POST',
+    }),
 };

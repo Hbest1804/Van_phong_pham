@@ -117,8 +117,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const logout = () => {
-    setUser(null);
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (err) {
+      console.error('Logout API failed:', err);
+    } finally {
+      setUser(null);
+    }
   };
 
   const updateProfile = (data: Partial<User>) => {
