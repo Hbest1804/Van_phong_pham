@@ -55,11 +55,34 @@ async function request<T>(
     ...(options.headers as Record<string, string>),
   };
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  let res = await fetch(`${BASE_URL}${path}`, {
     credentials: 'include', // gửi cookie (refreshToken)
     ...options,
     headers,
   });
+
+  if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login') {
+    try {
+      const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (refreshRes.ok) {
+        const refreshJson = await refreshRes.json();
+        if (refreshJson.success && refreshJson.data?.accessToken) {
+          localStorage.setItem('accessToken', refreshJson.data.accessToken);
+          headers['Authorization'] = `Bearer ${refreshJson.data.accessToken}`;
+          res = await fetch(`${BASE_URL}${path}`, {
+            ...options,
+            headers,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh token:', err);
+    }
+  }
 
   const json: ApiResponse<T> = await res.json();
   return json;
