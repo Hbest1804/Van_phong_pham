@@ -5,7 +5,7 @@ import * as authController from '../controllers/auth.controller.js';
 
 const router = Router();
 
-// ── Validation rules ─────────────────────────────────────────────────────────
+// ── Validation rules ──────────────────────────────────────────────────────────
 
 const registerRules = [
   body('email')
@@ -36,16 +36,6 @@ const registerRules = [
     .isLength({ max: 500 }).withMessage('Địa chỉ tối đa 500 ký tự.'),
 ];
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-
-/**
- * POST /api/v1/auth/register
- * Tạo tài khoản người dùng mới
- */
-router.post('/register', registerRules, validate, authController.register);
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 const loginRules = [
   body('email')
     .trim()
@@ -57,10 +47,25 @@ const loginRules = [
     .notEmpty().withMessage('Mật khẩu không được để trống.'),
 ];
 
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/auth/register
+ * Tạo tài khoản người dùng mới
+ */
+router.post('/register', registerRules, validate, authController.register);
+
 /**
  * POST /api/v1/auth/login
  * Đăng nhập bằng email và mật khẩu
  */
 router.post('/login', loginRules, validate, authController.login);
+
+/**
+ * POST /api/v1/auth/refresh
+ * Làm mới access token bằng refresh token từ HttpOnly cookie.
+ * Thực hiện token rotation (xoá cũ, cấp mới) để tránh tái sử dụng.
+ */
+router.post('/refresh', authController.refresh);
 
 export default router;

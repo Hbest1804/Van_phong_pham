@@ -1,5 +1,16 @@
 import * as authService from '../services/auth.service.js';
 import { successResponse } from '../utils/response.js';
+import { env } from '../config/env.js';
+
+// Cookie options dùng chung — maxAge đồng bộ với JWT_REFRESH_EXPIRES_IN trong .env
+function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure:   env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge:   authService.refreshCookieMaxAge(),
+  };
+}
 
 /**
  * POST /api/v1/auth/register
@@ -11,13 +22,7 @@ export async function register(req, res, next) {
 
     const result = await authService.register({ email, password, name, phone, address });
 
-    // Gửi refresh token qua HttpOnly cookie (bảo mật hơn lưu localStorage)
-    res.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge:   7 * 24 * 60 * 60 * 1000, // 7 ngày (ms)
-    });
+    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions());
 
     return successResponse(res, {
       statusCode: 201,
@@ -42,17 +47,45 @@ export async function login(req, res, next) {
 
     const result = await authService.login({ email, password });
 
-    // Gửi refresh token qua HttpOnly cookie
-    res.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure:   process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge:   7 * 24 * 60 * 60 * 1000, // 7 ngày
-    });
+    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions());
 
     return successResponse(res, {
       statusCode: 200,
       message: 'Đăng nhập thành công!',
+      data: {
+        user:        result.user,
+        accessToken: result.accessToken,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/auth/refresh
+ * Cookie: refreshToken (HttpOnly)
+ * Trả về access token mới + xoay refresh token (token rotation)
+ */
+export async function refresh(req, res, next) {
+  try {
+    const token = req.cookies?.refreshToken;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Không tìm thấy refresh token. Vui lòng đăng nhập lại.',
+      });
+    }
+
+    const result = await authService.refresh(token);
+
+    // Ghi đè cookie với token mới (rotation)
+    res.cookie('refreshToken', result.refreshToken, refreshCookieOptions());
+
+    return successResponse(res, {
+      statusCode: 200,
+      message: 'Làm mới token thành công!',
       data: {
         user:        result.user,
         accessToken: result.accessToken,

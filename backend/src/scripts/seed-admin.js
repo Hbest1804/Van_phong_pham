@@ -28,27 +28,36 @@ export async function seedAdmin() {
   // 1. Kiểm tra đã tồn tại chưa
   const { data: existing } = await supabaseAdmin
     .from('users')
-    .select('id, email, role, status')
+    .select('id, email, role, status, password_hash')
     .eq('email', email)
     .maybeSingle();
 
   if (existing) {
-    // Luôn đồng bộ password_hash với ADMIN_DEFAULT_PASSWORD hiện tại trong .env
-    const password_hash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, 12);
+    const updatePayload = {};
 
-    const updatePayload = { password_hash };
-    if (existing.role !== 'admin') updatePayload.role = 'admin';
+    // Chỉ re-hash khi mật khẩu thực sự thay đổi (tránh hash thừa mỗi lần restart)
+    const passwordMatch = await bcrypt.compare(ADMIN_DEFAULT_PASSWORD, existing.password_hash);
+    if (!passwordMatch) {
+      updatePayload.password_hash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, 12);
+      console.log('🔑  Mật khẩu admin thay đổi — đang cập nhật...');
+    }
+
+    if (existing.role !== 'admin')   updatePayload.role   = 'admin';
     if (existing.status !== 'active') updatePayload.status = 'active';
 
-    const { error } = await supabaseAdmin
-      .from('users')
-      .update(updatePayload)
-      .eq('id', existing.id);
+    if (Object.keys(updatePayload).length > 0) {
+      const { error } = await supabaseAdmin
+        .from('users')
+        .update(updatePayload)
+        .eq('id', existing.id);
 
-    if (error) {
-      console.error('❌  Không thể cập nhật admin:', error.message);
+      if (error) {
+        console.error('❌  Không thể cập nhật admin:', error.message);
+      } else {
+        console.log(`✅  Admin đã đồng bộ: ${existing.email}`);
+      }
     } else {
-      console.log(`✅  Admin đồng bộ: ${existing.email} — mật khẩu đã cập nhật theo .env`);
+      console.log(`✅  Admin đã tồn tại: ${existing.email} (status: ${existing.status})`);
     }
     return;
   }
