@@ -11,8 +11,7 @@ const registerRules = [
   body('email')
     .trim()
     .notEmpty().withMessage('Email không được để trống.')
-    .isEmail().withMessage('Email không đúng định dạng.')
-    .normalizeEmail(),
+    .isEmail().withMessage('Email không đúng định dạng.'),
 
   body('password')
     .notEmpty().withMessage('Mật khẩu không được để trống.')
@@ -28,7 +27,7 @@ const registerRules = [
   body('phone')
     .optional({ nullable: true, checkFalsy: true })
     .trim()
-    .matches(/^(0[3|5|7|8|9])+([0-9]{8})$/).withMessage('Số điện thoại không hợp lệ (phải là số VN 10 chữ số).'),
+    .matches(/^0[35789][0-9]{8}$/).withMessage('Số điện thoại không hợp lệ (phải là số VN 10 chữ số).'),
 
   body('address')
     .optional({ nullable: true, checkFalsy: true })
@@ -40,8 +39,7 @@ const loginRules = [
   body('email')
     .trim()
     .notEmpty().withMessage('Email không được để trống.')
-    .isEmail().withMessage('Email không đúng định dạng.')
-    .normalizeEmail(),
+    .isEmail().withMessage('Email không đúng định dạng.'),
 
   body('password')
     .notEmpty().withMessage('Mật khẩu không được để trống.'),

@@ -23,11 +23,12 @@ function hashToken(token) {
 function parseExpiresInMs(raw) {
   const str = String(raw).trim();
 
-  // Dạng "7d", "12h", "60m", "30s"
+  // Dạng "7d", "12h", "60m", "30s", "1w"
   const match = str.match(/^(\d+)\s*([a-zA-Z]+)$/);
   if (match) {
     const value = parseInt(match[1], 10);
     const unit  = match[2].toLowerCase();
+    if (unit.startsWith('w')) return value * 7 * 86_400_000;
     if (unit.startsWith('d')) return value * 86_400_000;
     if (unit.startsWith('h')) return value * 3_600_000;
     if (unit.startsWith('m')) return value * 60_000;
@@ -35,8 +36,9 @@ function parseExpiresInMs(raw) {
   }
 
   // Dạng thuần số giây (e.g. "604800")
-  const seconds = parseInt(str, 10);
-  if (!isNaN(seconds)) return seconds * 1_000;
+  if (/^\d+$/.test(str)) {
+    return parseInt(str, 10) * 1_000;
+  }
 
   // Fallback 7 ngày
   console.warn(`[auth.service] Không parse được JWT_REFRESH_EXPIRES_IN="${raw}", dùng mặc định 7 ngày.`);

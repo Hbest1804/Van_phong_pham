@@ -85,7 +85,7 @@ export function Register() {
       errors.confirmPassword = 'Mật khẩu nhập lại không khớp.';
     }
 
-    if (form.phone && !/^(0[3|5|7|8|9])+([0-9]{8})$/.test(form.phone)) {
+    if (form.phone && !/^0[35789][0-9]{8}$/.test(form.phone)) {
       errors.phone = 'Số điện thoại không hợp lệ (10 chữ số, bắt đầu 03/05/07/08/09).';
     }
 
