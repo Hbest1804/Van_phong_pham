@@ -5,51 +5,143 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../../comp
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 
-export function Login() {
-  const { login, user } = useAuth();
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+interface FieldError {
+  email?: string;
+  password?: string;
+}
 
+export function Login() {
+  const { login, isLoading, user } = useAuth();
+  const navigate = useNavigate();
+
+  const [email, setEmail]       = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors]   = useState<FieldError>({});
+  const [serverError, setServerError]   = useState('');
+
+  // Đã đăng nhập → về trang chủ
   if (user) {
     navigate('/', { replace: true });
     return null;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    login(email, password);
+  // ── Validation ──────────────────────────────────────────────────────────────
+  const validate = (): boolean => {
+    const errors: FieldError = {};
+    if (!email) {
+      errors.email = 'Email không được để trống.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Email không đúng định dạng.';
+    }
+    if (!password) {
+      errors.password = 'Mật khẩu không được để trống.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
+  const handleChange = (setter: React.Dispatch<React.SetStateAction<string>>, field: keyof FieldError) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setter(e.target.value);
+      if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: undefined }));
+      setServerError('');
+    };
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validate()) return;
+
+    const result = await login({ email, password });
+    if (result.success) {
+      navigate('/', { replace: true });
+    } else {
+      setServerError(result.message);
+    }
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-md mx-auto mt-12">
+    <div className="max-w-md mx-auto mt-12 mb-12 px-4">
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl text-center">Đăng nhập</CardTitle>
+          <p className="text-center text-sm text-gray-500 mt-1">
+            Chào mừng bạn quay lại!
+          </p>
         </CardHeader>
+
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input type="email" required value={email} onChange={e => setEmail(e.target.value)} />
+          {/* Lỗi từ server */}
+          {serverError && (
+            <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {serverError}
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Mật khẩu</label>
-              <Input type="password" required value={password} onChange={e => setPassword(e.target.value)} />
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+            {/* Email */}
+            <div className="space-y-1">
+              <label htmlFor="login-email" className="text-sm font-medium">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <Input
+                id="login-email"
+                type="email"
+                placeholder="example@email.com"
+                required
+                value={email}
+                onChange={handleChange(setEmail, 'email')}
+                className={fieldErrors.email ? 'border-red-400 focus:ring-red-400' : ''}
+              />
+              {fieldErrors.email && (
+                <p className="text-xs text-red-500">{fieldErrors.email}</p>
+              )}
             </div>
-            <Button type="submit" className="w-full">Đăng nhập</Button>
+
+            {/* Mật khẩu */}
+            <div className="space-y-1">
+              <label htmlFor="login-password" className="text-sm font-medium">
+                Mật khẩu <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Nhập mật khẩu"
+                  required
+                  value={password}
+                  onChange={handleChange(setPassword, 'password')}
+                  className={fieldErrors.password ? 'border-red-400 focus:ring-red-400 pr-10' : 'pr-10'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs select-none"
+                  tabIndex={-1}
+                >
+                  {showPassword ? 'Ẩn' : 'Hiện'}
+                </button>
+              </div>
+              {fieldErrors.password && (
+                <p className="text-xs text-red-500">{fieldErrors.password}</p>
+              )}
+            </div>
+
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+            </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center text-sm">
-          <span>Chưa có tài khoản? <Link to="/register" className="text-blue-600 hover:underline">Đăng ký</Link></span>
+
+        <CardFooter className="flex justify-center text-sm gap-1">
+          <span>Chưa có tài khoản?</span>
+          <Link to="/register" className="text-blue-600 hover:underline font-medium">
+            Đăng ký
+          </Link>
         </CardFooter>
       </Card>
-      
-      <div className="mt-6 text-sm text-center text-slate-500 bg-slate-100 p-4 rounded-md">
-        <p className="font-semibold mb-1">Tài khoản demo:</p>
-        <p>User: user@gmail.com / Pass: 123</p>
-        <p>Admin: admin@stationery.com / Pass: 123</p>
-      </div>
     </div>
   );
 }
