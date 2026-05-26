@@ -79,6 +79,10 @@ async function request<T>(
               localStorage.setItem('accessToken', newAccessToken);
               return newAccessToken;
             }
+          } else if (refreshRes.status === 401 || refreshRes.status === 403) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('auth_user');
+            window.dispatchEvent(new Event('auth-logout'));
           }
         } catch (err) {
           console.error('Failed to refresh token:', err);

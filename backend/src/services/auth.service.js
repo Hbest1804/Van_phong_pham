@@ -256,7 +256,16 @@ export async function refresh(rawRefreshToken) {
     throw new AppError('Lỗi xác thực token. Vui lòng thử lại.', 500);
   }
   if (!storedToken) {
-    throw new AppError('Refresh token không tồn tại hoặc đã bị thu hồi.', 401);
+    // Token Reuse Detection: Nếu JWT hợp lệ nhưng không có trong DB
+    // => Token đã bị dùng (xoá) hoặc thu hồi => Dấu hiệu bị đánh cắp.
+    // Thu hồi toàn bộ refresh tokens của user này để bảo vệ.
+    if (payload && payload.id) {
+      await supabaseAdmin
+        .from('refresh_tokens')
+        .delete()
+        .eq('user_id', payload.id);
+    }
+    throw new AppError('Refresh token không tồn tại hoặc đã bị thu hồi. Đã đăng xuất khỏi tất cả thiết bị.', 401);
   }
 
   // 3. Kiểm tra hết hạn trong DB

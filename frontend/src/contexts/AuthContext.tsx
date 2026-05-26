@@ -36,6 +36,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [user]);
 
+  // Lắng nghe sự kiện đăng xuất từ API client khi hết hạn phiên làm việc
+  useEffect(() => {
+    const handleLogout = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth-logout', handleLogout);
+    return () => window.removeEventListener('auth-logout', handleLogout);
+  }, []);
+
   // ── Actions ─────────────────────────────────────────────────────────────────
 
   /**

@@ -42,7 +42,7 @@ export async function seedAdmin() {
       console.log('🔑  Mật khẩu admin thay đổi — đang cập nhật...');
     }
 
-    if (existing.role !== 'admin')   updatePayload.role   = 'admin';
+    if (existing.role !== 'admin') updatePayload.role = 'admin';
     if (existing.status !== 'active') updatePayload.status = 'active';
 
     if (Object.keys(updatePayload).length > 0) {
@@ -70,8 +70,8 @@ export async function seedAdmin() {
     .insert({
       email,
       password_hash,
-      name:   ADMIN_DEFAULT_NAME.trim(),
-      role:   'admin',
+      name: ADMIN_DEFAULT_NAME.trim(),
+      role: 'admin',
       status: 'active',
     })
     .select('id, email, name, role, status')
