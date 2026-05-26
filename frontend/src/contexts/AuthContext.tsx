@@ -1,83 +1,141 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '../types';
-import { initialUsers } from '../lib/mockData';
+import { authApi, RegisterPayload, LoginPayload } from '../lib/api';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password?: string) => void;
-  register: (name: string, email: string, password?: string) => void;
+  isLoading: boolean;
+  login: (payload: LoginPayload) => Promise<{ success: boolean; message: string }>;
+  register: (payload: RegisterPayload) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   updateProfile: (data: Partial<User>) => void;
 }
 
+// ── Context ───────────────────────────────────────────────────────────────────
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem('auth_user');
     return stored ? JSON.parse(stored) : null;
   });
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [usersDb, setUsersDb] = useState<User[]>(() => {
-    const stored = localStorage.getItem('db_users');
-    return stored ? JSON.parse(stored) : initialUsers;
-  });
-
-  useEffect(() => {
-    localStorage.setItem('db_users', JSON.stringify(usersDb));
-  }, [usersDb]);
-
+  // Đồng bộ user vào localStorage
   useEffect(() => {
     if (user) {
       localStorage.setItem('auth_user', JSON.stringify(user));
     } else {
       localStorage.removeItem('auth_user');
+      localStorage.removeItem('accessToken');
     }
   }, [user]);
 
-  const login = (email: string, password?: string) => {
-    const found = usersDb.find(u => u.email === email && (!password || u.password === password));
-    if (found) {
-      if (found.status === 'locked') {
-        alert('Tài khoản của bạn đã bị khóa!');
-        return;
-      }
-      setUser(found);
-    } else {
-      alert('Sai email hoặc mật khẩu');
-    }
-  };
-
-  const register = (name: string, email: string, password?: string) => {
-    if (usersDb.some(u => u.email === email)) {
-      alert('Email đã tồn tại!');
-      return;
-    }
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
-      email,
-      password,
-      role: 'user',
-      status: 'active'
+  // Lắng nghe sự kiện đăng xuất từ API client khi hết hạn phiên làm việc
+  useEffect(() => {
+    const handleLogout = () => {
+      setUser(null);
     };
-    setUsersDb([...usersDb, newUser]);
-    setUser(newUser);
+    window.addEventListener('auth-logout', handleLogout);
+    return () => window.removeEventListener('auth-logout', handleLogout);
+  }, []);
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Đăng ký tài khoản — gọi POST /api/v1/auth/register
+   */
+  const register = async (
+    payload: RegisterPayload
+  ): Promise<{ success: boolean; message: string }> => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.register(payload);
+
+      if (res.success && res.data) {
+        // Lưu accessToken vào localStorage
+        localStorage.setItem('accessToken', res.data.accessToken);
+
+        // Map sang User type của frontend
+        const loggedUser: User = {
+          id:      res.data.user.id,
+          email:   res.data.user.email,
+          name:    res.data.user.name,
+          role:    res.data.user.role,
+          status:  res.data.user.status,
+          phone:   res.data.user.phone   ?? undefined,
+          address: res.data.user.address ?? undefined,
+        };
+        setUser(loggedUser);
+        return { success: true, message: res.message };
+      }
+
+      return { success: false, message: res.message || 'Đăng ký thất bại.' };
+    } catch {
+      return { success: false, message: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.' };
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
+  /**
+   * Đăng nhập — gọi POST /api/v1/auth/login
+   */
+  const login = async (
+    payload: LoginPayload
+  ): Promise<{ success: boolean; message: string }> => {
+    setIsLoading(true);
+    try {
+      const res = await authApi.login(payload);
+
+      if (res.success && res.data) {
+        localStorage.setItem('accessToken', res.data.accessToken);
+
+        const loggedUser: User = {
+          id:      res.data.user.id,
+          email:   res.data.user.email,
+          name:    res.data.user.name,
+          role:    res.data.user.role,
+          status:  res.data.user.status,
+          phone:   res.data.user.phone   ?? undefined,
+          address: res.data.user.address ?? undefined,
+        };
+        setUser(loggedUser);
+        return { success: true, message: res.message };
+      }
+
+      return { success: false, message: res.message || 'Đăng nhập thất bại.' };
+    } catch {
+      return { success: false, message: 'Không thể kết nối đến máy chủ. Vui lòng thử lại.' };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch (err) {
+      console.error('Logout API failed:', err);
+    } finally {
+      setUser(null);
+    }
   };
 
   const updateProfile = (data: Partial<User>) => {
     if (!user) return;
-    const updated = { ...user, ...data };
-    setUser(updated);
-    setUsersDb(usersDb.map(u => u.id === updated.id ? updated : u));
+    setUser({ ...user, ...data });
   };
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateProfile }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, updateProfile }}>
       {children}
     </AuthContext.Provider>
   );
