@@ -193,7 +193,7 @@ backend/
 |--------|----------|-------|------|
 | POST | `/register` | Đăng ký tài khoản | ❌ |
 | POST | `/login` | Đăng nhập, nhận token | ❌ |
-| POST | `/refresh` | Làm mới access token | ❌ |
+| POST | `/refresh-token` | Làm mới access token | ❌ |
 | POST | `/logout` | Đăng xuất | ✅ |
 | GET | `/me` | Thông tin tài khoản hiện tại | ✅ |
 

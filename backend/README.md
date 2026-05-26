@@ -68,11 +68,11 @@ backend/
 ### Auth
 | Method | Path | Mô tả |
 |--------|------|-------|
-| POST | `/api/auth/register` | Đăng ký |
-| POST | `/api/auth/login` | Đăng nhập |
-| POST | `/api/auth/refresh` | Refresh access token |
-| POST | `/api/auth/logout` | Đăng xuất |
-| GET  | `/api/auth/me` | Lấy thông tin bản thân |
+| POST | `/api/v1/auth/register` | Đăng ký |
+| POST | `/api/v1/auth/login` | Đăng nhập |
+| POST | `/api/v1/auth/refresh-token` | Refresh access token |
+| POST | `/api/v1/auth/logout` | Đăng xuất |
+| GET  | `/api/v1/auth/me` | Lấy thông tin bản thân |
 
 ### Users (Admin only)
 | Method | Path | Mô tả |

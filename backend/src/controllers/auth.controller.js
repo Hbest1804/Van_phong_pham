@@ -63,7 +63,7 @@ export async function login(req, res, next) {
 }
 
 /**
- * POST /api/v1/auth/refresh
+ * POST /api/v1/auth/refresh-token
  * Cookie: refreshToken (HttpOnly)
  * Trả về access token mới + xoay refresh token (token rotation)
  */

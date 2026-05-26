@@ -60,11 +60,11 @@ router.post('/register', registerRules, validate, authController.register);
 router.post('/login', loginRules, validate, authController.login);
 
 /**
- * POST /api/v1/auth/refresh
+ * POST /api/v1/auth/refresh-token
  * Làm mới access token bằng refresh token từ HttpOnly cookie.
  * Thực hiện token rotation (xoá cũ, cấp mới) để tránh tái sử dụng.
  */
-router.post('/refresh', authController.refresh);
+router.post('/refresh-token', authController.refresh);
 
 /**
  * POST /api/v1/auth/logout
