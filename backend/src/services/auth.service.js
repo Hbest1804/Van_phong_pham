@@ -209,6 +209,7 @@ export async function login(dto) {
 
   if (tokenError) {
     console.error('[auth.service] Lỗi lưu refresh token (login):', tokenError.message);
+    throw new AppError('Lỗi đăng nhập. Vui lòng thử lại.', 500);
   }
 
   return {
@@ -313,6 +314,7 @@ export async function refresh(rawRefreshToken) {
 
   if (insertError) {
     console.error('[auth.service] Lỗi lưu refresh token mới (refresh):', insertError.message);
+    throw new AppError('Lỗi xác thực token. Vui lòng đăng nhập lại.', 500);
   }
 
   return {
@@ -329,4 +331,16 @@ export async function refresh(rawRefreshToken) {
     accessToken:  newAccessToken,
     refreshToken: newRefreshToken,
   };
+}
+
+/**
+ * Thu hồi refresh token khi đăng xuất
+ * @param {string} rawRefreshToken
+ */
+export async function logout(rawRefreshToken) {
+  const tokenHash = hashToken(rawRefreshToken);
+  await supabaseAdmin
+    .from('refresh_tokens')
+    .delete()
+    .eq('token_hash', tokenHash);
 }

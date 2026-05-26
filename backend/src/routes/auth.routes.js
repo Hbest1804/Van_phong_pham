@@ -68,4 +68,10 @@ router.post('/login', loginRules, validate, authController.login);
  */
 router.post('/refresh', authController.refresh);
 
+/**
+ * POST /api/v1/auth/logout
+ * Đăng xuất, xoá cookie và thu hồi refresh token
+ */
+router.post('/logout', authController.logout);
+
 export default router;

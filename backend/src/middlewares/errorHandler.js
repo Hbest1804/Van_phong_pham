@@ -17,15 +17,15 @@ export function errorHandler(err, req, res, _next) {
   }
 
   // Lỗi JWT
-  if (err.name === 'JsonWebTokenError') {
+  if (err && err.name === 'JsonWebTokenError') {
     return errorResponse(res, { statusCode: 401, message: 'Token không hợp lệ.' });
   }
-  if (err.name === 'TokenExpiredError') {
+  if (err && err.name === 'TokenExpiredError') {
     return errorResponse(res, { statusCode: 401, message: 'Token đã hết hạn.' });
   }
 
   // Lỗi Supabase / PostgreSQL unique constraint
-  if (err.code === '23505') {
+  if (err && err.code === '23505') {
     return errorResponse(res, { statusCode: 409, message: 'Dữ liệu đã tồn tại (duplicate).' });
   }
 

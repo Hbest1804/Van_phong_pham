@@ -95,3 +95,24 @@ export async function refresh(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * POST /api/v1/auth/logout
+ */
+export async function logout(req, res, next) {
+  try {
+    const token = req.cookies?.refreshToken;
+    if (token) {
+      await authService.logout(token);
+    }
+
+    res.clearCookie('refreshToken', refreshCookieOptions());
+
+    return successResponse(res, {
+      statusCode: 200,
+      message: 'Đăng xuất thành công!',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
