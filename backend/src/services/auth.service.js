@@ -232,7 +232,7 @@ export async function login(dto) {
 
 /**
  * 2.3 Làm mới Access Token bằng Refresh Token (token rotation)
- * POST /api/v1/auth/refresh
+ * POST /api/v1/auth/refresh-token
  *
  * @param {string} rawRefreshToken  — token lấy từ HttpOnly cookie
  * @returns {{ user, accessToken, refreshToken }}

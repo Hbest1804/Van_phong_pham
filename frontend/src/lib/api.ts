@@ -63,11 +63,11 @@ async function request<T>(
     headers,
   });
 
-  if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login') {
+  if (res.status === 401 && path !== '/auth/refresh-token' && path !== '/auth/login') {
     if (!refreshPromise) {
       refreshPromise = (async () => {
         try {
-          const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+          const refreshRes = await fetch(`${BASE_URL}/auth/refresh-token`, {
             method: 'POST',
             credentials: 'include',
           });
