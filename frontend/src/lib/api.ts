@@ -43,6 +43,8 @@ export interface AuthData {
 
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
+let refreshPromise: Promise<string | null> | null = null;
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
@@ -62,25 +64,38 @@ async function request<T>(
   });
 
   if (res.status === 401 && path !== '/auth/refresh' && path !== '/auth/login') {
-    try {
-      const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (refreshRes.ok) {
-        const refreshJson = await refreshRes.json();
-        if (refreshJson.success && refreshJson.data?.accessToken) {
-          localStorage.setItem('accessToken', refreshJson.data.accessToken);
-          headers['Authorization'] = `Bearer ${refreshJson.data.accessToken}`;
-          res = await fetch(`${BASE_URL}${path}`, {
-            ...options,
-            headers,
+    if (!refreshPromise) {
+      refreshPromise = (async () => {
+        try {
+          const refreshRes = await fetch(`${BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            credentials: 'include',
           });
+
+          if (refreshRes.ok) {
+            const refreshJson = await refreshRes.json();
+            if (refreshJson.success && refreshJson.data?.accessToken) {
+              const newAccessToken = refreshJson.data.accessToken;
+              localStorage.setItem('accessToken', newAccessToken);
+              return newAccessToken;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to refresh token:', err);
+        } finally {
+          refreshPromise = null;
         }
-      }
-    } catch (err) {
-      console.error('Failed to refresh token:', err);
+        return null;
+      })();
+    }
+
+    const newAccessToken = await refreshPromise;
+    if (newAccessToken) {
+      headers['Authorization'] = `Bearer ${newAccessToken}`;
+      res = await fetch(`${BASE_URL}${path}`, {
+        ...options,
+        headers,
+      });
     }
   }
 

@@ -281,7 +281,15 @@ export async function refresh(rawRefreshToken) {
   }
 
   // 5. Token Rotation — xoá token cũ, cấp token mới
-  await supabaseAdmin.from('refresh_tokens').delete().eq('id', storedToken.id);
+  const { error: deleteError } = await supabaseAdmin
+    .from('refresh_tokens')
+    .delete()
+    .eq('id', storedToken.id);
+
+  if (deleteError) {
+    console.error('[auth.service] Lỗi xoá refresh token cũ:', deleteError.message);
+    throw new AppError('Lỗi xác thực token. Vui lòng thử lại.', 500);
+  }
 
   const newAccessToken  = signAccessToken({ id: user.id, email: user.email, role: user.role });
   const newRefreshToken = signRefreshToken({ id: user.id });
