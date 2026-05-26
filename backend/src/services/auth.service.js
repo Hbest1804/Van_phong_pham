@@ -292,31 +292,21 @@ export async function refresh(rawRefreshToken) {
     throw new AppError('Tài khoản của bạn đã bị khoá.', 403);
   }
 
-  // 5. Token Rotation — xoá token cũ, cấp token mới
-  const { error: deleteError } = await supabaseAdmin
-    .from('refresh_tokens')
-    .delete()
-    .eq('id', storedToken.id);
-
-  if (deleteError) {
-    console.error('[auth.service] Lỗi xoá refresh token cũ:', deleteError.message);
-    throw new AppError('Lỗi xác thực token. Vui lòng thử lại.', 500);
-  }
-
+  // 5. Token Rotation — cập nhật token cũ thành token mới trong một thao tác duy nhất (atomic)
   const newAccessToken  = signAccessToken({ id: user.id, email: user.email, role: user.role });
   const newRefreshToken = signRefreshToken({ id: user.id });
 
-  const { error: insertError } = await supabaseAdmin
+  const { error: updateError } = await supabaseAdmin
     .from('refresh_tokens')
-    .insert({
-      user_id:    user.id,
+    .update({
       token_hash: hashToken(newRefreshToken),
       expires_at: calcRefreshExpiry(),
-    });
+    })
+    .eq('id', storedToken.id);
 
-  if (insertError) {
-    console.error('[auth.service] Lỗi lưu refresh token mới (refresh):', insertError.message);
-    throw new AppError('Lỗi xác thực token. Vui lòng đăng nhập lại.', 500);
+  if (updateError) {
+    console.error('[auth.service] Lỗi cập nhật refresh token (refresh):', updateError.message);
+    throw new AppError('Lỗi xác thực token. Vui lòng thử lại.', 500);
   }
 
   return {
