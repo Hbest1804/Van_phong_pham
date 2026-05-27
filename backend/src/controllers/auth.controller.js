@@ -116,3 +116,26 @@ export async function logout(req, res, next) {
     next(err);
   }
 }
+
+/**
+ * POST /api/v1/auth/forgot-password
+ * Body: { email }
+ *
+ * Luôn trả 200 dù email có tồn tại hay không (tránh user enumeration).
+ */
+export async function forgotPassword(req, res, next) {
+  try {
+    const { email } = req.body;
+
+    await authService.forgotPassword({ email });
+
+    return successResponse(res, {
+      statusCode: 200,
+      message:
+        'Nếu email của bạn tồn tại trong hệ thống, chúng tôi đã gửi link đặt lại mật khẩu. Vui lòng kiểm tra hộp thư (kể cả thư mục Spam).',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+

@@ -84,6 +84,26 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires  ON refresh_tokens (expire
 
 
 -- ============================================================
+-- 3b. BẢNG: password_reset_tokens
+--     Lưu token đặt lại mật khẩu (1 token / user, tự hết hạn)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash  TEXT        NOT NULL UNIQUE,               -- SHA-256 của raw token gửi qua email
+  expires_at  TIMESTAMPTZ NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id)                                       -- mỗi user chỉ có 1 token reset tại 1 thời điểm
+);
+
+COMMENT ON TABLE  password_reset_tokens            IS 'Token đặt lại mật khẩu — mỗi user tối đa 1 token hiệu lực';
+COMMENT ON COLUMN password_reset_tokens.token_hash IS 'SHA-256 hash của token gửi trong link email';
+
+CREATE INDEX IF NOT EXISTS idx_prt_user_id   ON password_reset_tokens (user_id);
+CREATE INDEX IF NOT EXISTS idx_prt_expires   ON password_reset_tokens (expires_at);
+
+
+-- ============================================================
 -- 4. BẢNG: categories
 -- ============================================================
 CREATE TABLE IF NOT EXISTS categories (

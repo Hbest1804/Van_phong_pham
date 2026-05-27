@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { AppError } from '../utils/AppError.js';
 import { env } from '../config/env.js';
+import { sendPasswordResetEmail } from '../utils/mailer.js';
 
 const SALT_ROUNDS = 12;
 
@@ -336,3 +337,75 @@ export async function logout(rawRefreshToken) {
     .delete()
     .eq('token_hash', tokenHash);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 2.4 Quên mật khẩu — gửi link đặt lại qua email
+ * POST /api/v1/auth/forgot-password
+ *
+ * Luồng bảo mật:
+ *  1. Tìm user theo email (luôn trả 200 để không lộ email tồn tại hay không)
+ *  2. Tạo reset token ngẫu nhiên (32 bytes hex) — lưu HASH vào DB
+ *  3. Xây dựng reset URL dẫn về frontend
+ *  4. Gửi email chứa link reset
+ *
+ * @param {{ email: string }} dto
+ */
+export async function forgotPassword({ email }) {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // 1. Tìm user (không throw nếu không tìm thấy — tránh user enumeration)
+  const { data: user, error: lookupError } = await supabaseAdmin
+    .from('users')
+    .select('id, email, name, status')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError('Lỗi hệ thống. Vui lòng thử lại.', 500);
+  }
+
+  // Luôn trả thành công để không tiết lộ email có tồn tại không
+  if (!user) return;
+
+  // Tài khoản bị khoá thì cũng silently bỏ qua
+  if (user.status === 'locked') return;
+
+  // 2. Tạo raw token + hash
+  const rawToken  = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(rawToken);
+
+  const expiresAt = new Date(
+    Date.now() + env.RESET_TOKEN_EXPIRES_MIN * 60 * 1000,
+  ).toISOString();
+
+  // 3. Xoá token reset cũ của user (nếu có) rồi lưu token mới
+  await supabaseAdmin
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', user.id);
+
+  const { error: insertError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .insert({
+      user_id:    user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+    });
+
+  if (insertError) {
+    console.error('[auth.service] Lỗi lưu reset token:', insertError.message);
+    throw new AppError('Không thể tạo yêu cầu đặt lại mật khẩu. Vui lòng thử lại.', 500);
+  }
+
+  // 4. Gửi email
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+
+  await sendPasswordResetEmail({
+    to:       user.email,
+    name:     user.name,
+    resetUrl,
+  });
+}
+

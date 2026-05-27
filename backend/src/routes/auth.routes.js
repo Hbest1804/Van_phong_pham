@@ -72,4 +72,21 @@ router.post('/refresh-token', authController.refresh);
  */
 router.post('/logout', authController.logout);
 
+// ── Validation rules cho forgot-password ─────────────────────────────────────
+
+const forgotPasswordRules = [
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email không được để trống.')
+    .isEmail().withMessage('Email không đúng định dạng.'),
+];
+
+/**
+ * POST /api/v1/auth/forgot-password
+ * Gửi link đặt lại mật khẩu qua email.
+ * Luôn trả 200 dù email tồn tại hay không (chống user enumeration).
+ */
+router.post('/forgot-password', forgotPasswordRules, validate, authController.forgotPassword);
+
 export default router;
+

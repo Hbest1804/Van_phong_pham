@@ -11,6 +11,9 @@ const required = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'JWT_ACCESS_SECRET',
   'JWT_REFRESH_SECRET',
+  'SMTP_HOST',
+  'SMTP_USER',
+  'SMTP_PASS',
 ];
 
 for (const key of required) {
@@ -33,4 +36,15 @@ export const env = {
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
 
   FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
+
+  // ── SMTP (Nodemailer) ──────────────────────────────────────
+  SMTP_HOST:   process.env.SMTP_HOST,
+  SMTP_PORT:   parseInt(process.env.SMTP_PORT || '587', 10),
+  SMTP_SECURE: process.env.SMTP_SECURE === 'true', // true chỉ khi dùng port 465
+  SMTP_USER:   process.env.SMTP_USER,
+  SMTP_PASS:   process.env.SMTP_PASS,
+
+  // ── Reset Token ────────────────────────────────────────────
+  // Thời gian hiệu lực link đặt lại mật khẩu (phút)
+  RESET_TOKEN_EXPIRES_MIN: parseInt(process.env.RESET_TOKEN_EXPIRES_MIN || '15', 10),
 };
