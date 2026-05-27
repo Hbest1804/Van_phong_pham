@@ -36,8 +36,12 @@ export async function getProducts(query) {
     dbQuery = dbQuery.ilike('name', `%${search.trim()}%`);
   }
 
-  // Lọc theo category
+  // Lọc theo category (validate UUID trước để tránh lỗi 500 từ PostgreSQL)
   if (categoryId && categoryId.trim() !== '' && categoryId !== 'all') {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(categoryId)) {
+      throw new AppError('Mã danh mục không hợp lệ.', 400);
+    }
     dbQuery = dbQuery.eq('category_id', categoryId);
   }
 
@@ -91,6 +95,12 @@ export async function getProducts(query) {
  * @param {string} id 
  */
 export async function getProductById(id) {
+  // Validate UUID format trước để tránh lỗi 500 từ PostgreSQL
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(id)) {
+    throw new AppError('Mã sản phẩm không hợp lệ.', 400);
+  }
+
   const { data: product, error } = await supabaseAdmin
     .from('products')
     .select('*')
