@@ -12,7 +12,7 @@ import { AppError } from '../utils/AppError.js';
  * @param {number} [query.maxPrice]
  * @param {boolean} [query.includeInactive] - Mặc định false (chỉ lấy is_active=true)
  */
-export async function getProducts(query) {
+export async function getProducts(query = {}) {
   const page = Math.max(1, parseInt(query.page) || 1);
   const limit = Math.max(1, parseInt(query.limit) || 12);
   const { search, categoryId, maxPrice, includeInactive = false } = query;
@@ -32,22 +32,23 @@ export async function getProducts(query) {
   }
 
   // Lọc theo từ khóa tìm kiếm (ILIKES search)
-  if (search && search.trim() !== '') {
+  if (typeof search === 'string' && search.trim() !== '') {
     dbQuery = dbQuery.ilike('name', `%${search.trim()}%`);
   }
 
   // Lọc theo category (validate UUID trước để tránh lỗi 500 từ PostgreSQL)
-  if (categoryId && categoryId.trim() !== '' && categoryId !== 'all') {
+  if (typeof categoryId === 'string' && categoryId.trim() !== '' && categoryId !== 'all') {
+    const cleanCategoryId = categoryId.trim();
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(categoryId)) {
+    if (!uuidRegex.test(cleanCategoryId)) {
       throw new AppError('Mã danh mục không hợp lệ.', 400);
     }
-    dbQuery = dbQuery.eq('category_id', categoryId);
+    dbQuery = dbQuery.eq('category_id', cleanCategoryId);
   }
 
   // Lọc theo khoảng giá tối đa
   if (maxPrice !== undefined && maxPrice !== null) {
-    const parsedMaxPrice = parseFloat(maxPrice);
+    const parsedMaxPrice = typeof maxPrice === 'number' ? maxPrice : parseFloat(String(maxPrice));
     if (!isNaN(parsedMaxPrice)) {
       dbQuery = dbQuery.lte('price', parsedMaxPrice);
     }
