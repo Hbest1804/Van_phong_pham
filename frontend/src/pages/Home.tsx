@@ -19,6 +19,21 @@ export function Home() {
   
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<number>(1000000);
+  const [localPrice, setLocalPrice] = useState<number>(1000000);
+
+  // Debounce: chỉ cập nhật priceRange (trigger API) sau 400ms kể từ lần kéo slider cuối cùng
+  useEffect(() => {
+    if (localPrice === priceRange) return;
+    const timer = setTimeout(() => {
+      setPriceRange(localPrice);
+      setSearchParams(prev => {
+        const newParams = new URLSearchParams(prev);
+        newParams.set('page', '1');
+        return newParams;
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [localPrice]);
 
   // State quản lý sản phẩm lấy từ backend
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
@@ -70,12 +85,9 @@ export function Home() {
     setSearchParams(newParams);
   };
 
-  // Reset trang về 1 khi đổi khoảng giá
+  // Cập nhật localPrice để UI phản hồi ngay, debounce effect sẽ trigger API sau 400ms
   const handlePriceChange = (val: number) => {
-    setPriceRange(val);
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('page', '1');
-    setSearchParams(newParams);
+    setLocalPrice(val);
   };
 
   // Chuyển trang
@@ -130,11 +142,11 @@ export function Home() {
               min="10000" 
               max="1000000" 
               step="10000" 
-              value={priceRange}
+              value={localPrice}
               onChange={(e) => handlePriceChange(Number(e.target.value))}
               className="w-full accent-indigo-600"
             />
-            <div className="text-sm font-bold text-indigo-600 mt-2">{formatCurrency(priceRange)}</div>
+            <div className="text-sm font-bold text-indigo-600 mt-2">{formatCurrency(localPrice)}</div>
           </div>
         </aside>
 
