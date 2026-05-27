@@ -452,7 +452,18 @@ export async function resetPassword({ token, password }) {
     throw new AppError('Link đặt lại mật khẩu đã hết hạn.', 400);
   }
 
-  // 3. Hash mật khẩu mới và cập nhật
+  // 3. Xóa token đã dùng trước (delete-first pattern để tránh replay attacks)
+  const { error: deleteError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', resetToken.user_id);
+
+  if (deleteError) {
+    console.error('[auth.service] Lỗi xóa reset token:', deleteError.message);
+    throw new AppError('Không thể hoàn tất quá trình đặt lại mật khẩu. Vui lòng thử lại.', 500);
+  }
+
+  // 4. Hash mật khẩu mới và cập nhật vào bảng users
   const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
   const { error: updateError } = await supabaseAdmin
@@ -461,12 +472,7 @@ export async function resetPassword({ token, password }) {
     .eq('id', resetToken.user_id);
 
   if (updateError) {
+    console.error('[auth.service] Lỗi cập nhật mật khẩu:', updateError.message);
     throw new AppError('Không thể cập nhật mật khẩu. Vui lòng thử lại.', 500);
   }
-
-  // 4. Xóa token đã dùng (invalidate mọi token còn lại của user này)
-  await supabaseAdmin
-    .from('password_reset_tokens')
-    .delete()
-    .eq('user_id', resetToken.user_id);
 }
