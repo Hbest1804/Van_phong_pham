@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Category, Order, Product, User } from '../types';
 import { initialCategories, initialProducts, initialUsers } from '../lib/mockData';
+import { categoriesApi, productsApi } from '../lib/api';
 
 interface StoreContextType {
   products: Product[];
   categories: Category[];
   orders: Order[];
   users: User[];
+  // NOTE: write operations below là local-only cho đến khi có CRUD API
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
@@ -16,6 +18,8 @@ interface StoreContextType {
   addOrder: (order: Order) => void;
   updateOrderStatus: (id: string, status: Order['status']) => void;
   toggleUserStatus: (id: string) => void;
+  /** Re-fetch products từ API (gọi sau khi có thị trường CRUD thực tế) */
+  reloadProducts: () => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -23,12 +27,11 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
   const [products, setProducts] = useState<Product[]>(() => {
     const stored = localStorage.getItem('db_products');
-    return stored ? JSON.parse(stored) : initialProducts;
+    return stored ? JSON.parse(stored) : [];
   });
-
   const [categories, setCategories] = useState<Category[]>(() => {
     const stored = localStorage.getItem('db_categories');
-    return stored ? JSON.parse(stored) : initialCategories;
+    return stored ? JSON.parse(stored) : [];
   });
 
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -41,8 +44,41 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     return stored ? JSON.parse(stored) : initialUsers;
   });
 
-  useEffect(() => localStorage.setItem('db_products', JSON.stringify(products)), [products]);
-  useEffect(() => localStorage.setItem('db_categories', JSON.stringify(categories)), [categories]);
+  // Tải danh mục và sản phẩm từ API thực tế
+  useEffect(() => {
+    categoriesApi.getCategories()
+      .then(res => {
+        if (res.success && res.data) {
+          setCategories(res.data);
+        } else {
+          // res.success=false không throw nên phải xử lý tường minh ở đây
+          console.error('Lỗi load danh mục từ API:', res.message);
+          setCategories(initialCategories);
+        }
+      })
+      .catch(err => {
+        console.error('Lỗi kết nối load danh mục:', err);
+        setCategories(initialCategories);
+      });
+
+    productsApi.getProducts({ limit: 100 })
+      .then(res => {
+        if (res.success && res.data) {
+          setProducts(res.data.products);
+        } else {
+          // res.success=false không throw nên phải xử lý tường minh ở đây
+          console.error('Lỗi load sản phẩm từ API:', res.message);
+          setProducts(initialProducts);
+        }
+      })
+      .catch(err => {
+        console.error('Lỗi kết nối load sản phẩm:', err);
+        setProducts(initialProducts);
+      });
+  }, []);
+
+  // API là source of truth cho products/categories — không sync ngược vào localStorage
+  // (tránh ghi đè dữ liệu cũ chưa được cập nhật vào DB khi remount)
   useEffect(() => localStorage.setItem('db_orders', JSON.stringify(orders)), [orders]);
   // Users synced partially here to see admin updates, actual source of truth for users is shared via localStorage
 
@@ -56,6 +92,17 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
+  /** Re-fetch products từ API — gọi lại sau khi có CRUD mutation thực tế */
+  const reloadProducts = async () => {
+    try {
+      const res = await productsApi.getProducts({ limit: 100 });
+      if (res.success && res.data) setProducts(res.data.products);
+    } catch (err) {
+      console.error('Lỗi reload products:', err);
+    }
+  };
+
+  // NOTE: các hàm dưới đây chỉ cập nhật local state cho đến khi có CRUD API thực tế
   const addProduct = (product: Omit<Product, 'id'>) => {
     setProducts([...products, { ...product, id: Math.random().toString(36).substr(2, 9) }]);
   };
@@ -111,7 +158,8 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       products, categories, orders, users,
       addProduct, updateProduct, deleteProduct,
       addCategory, updateCategory, deleteCategory,
-      addOrder, updateOrderStatus, toggleUserStatus
+      addOrder, updateOrderStatus, toggleUserStatus,
+      reloadProducts,
     }}>
       {children}
     </StoreContext.Provider>

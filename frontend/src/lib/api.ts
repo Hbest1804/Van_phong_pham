@@ -155,14 +155,60 @@ export const authApi = {
       body: JSON.stringify(payload),
     }),
 
-  /**
-   * POST /api/v1/auth/reset-password
-   * Đặt lại mật khẩu bằng token từ email
-   */
+// ── Reset Password ─────────────────────────────────────────────────────────────
   resetPassword: (payload: ResetPasswordPayload) =>
     request<void>('/auth/reset-password', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
 };
+
+import { Product, Category } from '../types';
+
+export interface GetProductsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  categoryId?: string;
+  maxPrice?: number;
+}
+
+export interface PaginatedProducts {
+  products: Product[];
+  pagination: {
+    totalItems: number;
+    totalPages: number;
+    currentPage: number;
+    limit: number;
+  };
+}
+
+export const productsApi = {
+  getProducts: (params: GetProductsParams) => {
+    const query = new URLSearchParams();
+    if (params.page) query.append('page', String(params.page));
+    if (params.limit) query.append('limit', String(params.limit));
+    if (params.search) query.append('search', params.search);
+    if (params.categoryId) query.append('categoryId', params.categoryId);
+    if (params.maxPrice) query.append('maxPrice', String(params.maxPrice));
+
+    const queryString = query.toString();
+    return request<PaginatedProducts>(`/products${queryString ? `?${queryString}` : ''}`, {
+      method: 'GET',
+    });
+  },
+
+  getProductById: (id: string) =>
+    request<Product>(`/products/${id}`, {
+      method: 'GET',
+    }),
+};
+
+export const categoriesApi = {
+  getCategories: () =>
+    request<Category[]>('/categories', {
+      method: 'GET',
+    }),
+};
+
 
