@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Category, Order, Product, User } from '../types';
 import { initialCategories, initialProducts, initialUsers } from '../lib/mockData';
+import { categoriesApi, productsApi } from '../lib/api';
 
 interface StoreContextType {
   products: Product[];
@@ -21,15 +22,8 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
-  const [products, setProducts] = useState<Product[]>(() => {
-    const stored = localStorage.getItem('db_products');
-    return stored ? JSON.parse(stored) : initialProducts;
-  });
-
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const stored = localStorage.getItem('db_categories');
-    return stored ? JSON.parse(stored) : initialCategories;
-  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const stored = localStorage.getItem('db_orders');
@@ -40,6 +34,31 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     const stored = localStorage.getItem('db_users');
     return stored ? JSON.parse(stored) : initialUsers;
   });
+
+  // Tải danh mục và sản phẩm từ API thực tế
+  useEffect(() => {
+    categoriesApi.getCategories()
+      .then(res => {
+        if (res.success && res.data) {
+          setCategories(res.data);
+        }
+      })
+      .catch(err => {
+        console.error('Lỗi load danh mục từ API:', err);
+        setCategories(initialCategories);
+      });
+
+    productsApi.getProducts({ limit: 100 })
+      .then(res => {
+        if (res.success && res.data) {
+          setProducts(res.data.products);
+        }
+      })
+      .catch(err => {
+        console.error('Lỗi load sản phẩm từ API:', err);
+        setProducts(initialProducts);
+      });
+  }, []);
 
   useEffect(() => localStorage.setItem('db_products', JSON.stringify(products)), [products]);
   useEffect(() => localStorage.setItem('db_categories', JSON.stringify(categories)), [categories]);
