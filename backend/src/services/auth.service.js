@@ -399,13 +399,74 @@ export async function forgotPassword({ email }) {
     throw new AppError('Không thể tạo yêu cầu đặt lại mật khẩu. Vui lòng thử lại.', 500);
   }
 
-  // 4. Gửi email
+  // 4. Gửi email bất đồng bộ — tránh timing attack (user enumeration) và tăng tốc độ phản hồi
   const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${rawToken}`;
 
-  await sendPasswordResetEmail({
+  sendPasswordResetEmail({
     to:       user.email,
     name:     user.name,
     resetUrl,
+  }).catch((err) => {
+    console.error('[auth.service] Lỗi gửi email reset password:', err.message);
   });
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 2.5 Đặt lại mật khẩu bằng token từ email
+ * POST /api/v1/auth/reset-password
+ *
+ * Luồng:
+ *  1. Hash token nhận từ client, tra cứu trong DB
+ *  2. Kiểm tra token hợp lệ và chưa hết hạn
+ *  3. Hash mật khẩu mới và cập nhật vào bảng users
+ *  4. Xóa token đã dùng (một lần duy nhất)
+ *
+ * @param {{ token: string, password: string }} dto
+ */
+export async function resetPassword({ token, password }) {
+  const tokenHash = hashToken(token);
+
+  // 1. Tra cứu token trong DB
+  const { data: resetToken, error: lookupError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .select('user_id, expires_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError('Lỗi hệ thống. Vui lòng thử lại.', 500);
+  }
+
+  if (!resetToken) {
+    throw new AppError('Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.', 400);
+  }
+
+  // 2. Kiểm tra hết hạn
+  if (new Date(resetToken.expires_at) < new Date()) {
+    await supabaseAdmin
+      .from('password_reset_tokens')
+      .delete()
+      .eq('token_hash', tokenHash);
+    throw new AppError('Link đặt lại mật khẩu đã hết hạn.', 400);
+  }
+
+  // 3. Hash mật khẩu mới và cập nhật
+  const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  const { error: updateError } = await supabaseAdmin
+    .from('users')
+    .update({ password_hash })
+    .eq('id', resetToken.user_id);
+
+  if (updateError) {
+    throw new AppError('Không thể cập nhật mật khẩu. Vui lòng thử lại.', 500);
+  }
+
+  // 4. Xóa token đã dùng (invalidate mọi token còn lại của user này)
+  await supabaseAdmin
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', resetToken.user_id);
+}

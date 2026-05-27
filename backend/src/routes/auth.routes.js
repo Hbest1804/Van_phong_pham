@@ -88,5 +88,25 @@ const forgotPasswordRules = [
  */
 router.post('/forgot-password', forgotPasswordRules, validate, authController.forgotPassword);
 
+// ── Validation rules cho reset-password ──────────────────────────────────────
+
+const resetPasswordRules = [
+  body('token')
+    .trim()
+    .notEmpty().withMessage('Token không được để trống.'),
+
+  body('password')
+    .notEmpty().withMessage('Mật khẩu không được để trống.')
+    .isLength({ min: 6 }).withMessage('Mật khẩu phải có ít nhất 6 ký tự.')
+    .matches(/[A-Z]/).withMessage('Mật khẩu phải chứa ít nhất 1 chữ hoa.')
+    .matches(/[0-9]/).withMessage('Mật khẩu phải chứa ít nhất 1 chữ số.'),
+];
+
+/**
+ * POST /api/v1/auth/reset-password
+ * Đặt lại mật khẩu bằng token từ email.
+ */
+router.post('/reset-password', resetPasswordRules, validate, authController.resetPassword);
+
 export default router;
 

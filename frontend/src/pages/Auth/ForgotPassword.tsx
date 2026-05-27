@@ -6,10 +6,11 @@ import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 
 export function ForgotPassword() {
-  const [email, setEmail]         = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [isLoading, setIsLoading]  = useState(false);
-  const [submitted, setSubmitted]  = useState(false); // trạng thái đã gửi thành công
+  const [email, setEmail]           = useState('');
+  const [emailError, setEmailError]  = useState('');
+  const [isLoading, setIsLoading]    = useState(false);
+  const [submitted, setSubmitted]    = useState(false); // trạng thái đã gửi thành công
+  const [serverError, setServerError] = useState('');  // lỗi từ server (500, v.v.)
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const validate = (): boolean => {
@@ -31,10 +32,16 @@ export function ForgotPassword() {
     if (!validate()) return;
 
     setIsLoading(true);
+    setServerError('');
     try {
-      await authApi.forgotPassword({ email: email.trim() });
-      // Luôn hiển thị thành công (backend không tiết lộ email có tồn tại hay không)
-      setSubmitted(true);
+      const res = await authApi.forgotPassword({ email: email.trim() });
+      if (res.success) {
+        // Backend xử lý thành công — hiện màn hình xác nhận
+        setSubmitted(true);
+      } else {
+        // Lỗi server (500, DB lỗi, v.v.) — hiện thông báo lỗi
+        setServerError(res.message || 'Đã xảy ra lỗi. Vui lòng thử lại sau.');
+      }
     } catch {
       // Lỗi mạng — vẫn hiện success để không tiết lộ thông tin
       setSubmitted(true);
@@ -167,6 +174,13 @@ export function ForgotPassword() {
                 'Gửi link đặt lại mật khẩu'
               )}
             </Button>
+
+            {/* Lỗi server (500, DB lỗi, v.v.) */}
+            {serverError && (
+              <p className="text-sm text-red-500 text-center bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                {serverError}
+              </p>
+            )}
           </form>
         </CardContent>
 

@@ -139,3 +139,21 @@ export async function forgotPassword(req, res, next) {
   }
 }
 
+/**
+ * POST /api/v1/auth/reset-password
+ * Body: { token, password }
+ */
+export async function resetPassword(req, res, next) {
+  try {
+    const { token, password } = req.body;
+    await authService.resetPassword({ token, password });
+    return successResponse(res, {
+      statusCode: 200,
+      message: 'Đặt lại mật khẩu thành công!',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+
