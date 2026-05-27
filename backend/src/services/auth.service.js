@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { AppError } from '../utils/AppError.js';
 import { env } from '../config/env.js';
+import { sendPasswordResetEmail } from '../utils/mailer.js';
 
 const SALT_ROUNDS = 12;
 
@@ -335,4 +336,143 @@ export async function logout(rawRefreshToken) {
     .from('refresh_tokens')
     .delete()
     .eq('token_hash', tokenHash);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 2.4 Quên mật khẩu — gửi link đặt lại qua email
+ * POST /api/v1/auth/forgot-password
+ *
+ * Luồng bảo mật:
+ *  1. Tìm user theo email (luôn trả 200 để không lộ email tồn tại hay không)
+ *  2. Tạo reset token ngẫu nhiên (32 bytes hex) — lưu HASH vào DB
+ *  3. Xây dựng reset URL dẫn về frontend
+ *  4. Gửi email chứa link reset
+ *
+ * @param {{ email: string }} dto
+ */
+export async function forgotPassword({ email }) {
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // 1. Tìm user (không throw nếu không tìm thấy — tránh user enumeration)
+  const { data: user, error: lookupError } = await supabaseAdmin
+    .from('users')
+    .select('id, email, name, status')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError('Lỗi hệ thống. Vui lòng thử lại.', 500);
+  }
+
+  // Luôn trả thành công để không tiết lộ email có tồn tại không
+  if (!user) return;
+
+  // Tài khoản bị khoá thì cũng silently bỏ qua
+  if (user.status === 'locked') return;
+
+  // 2. Tạo raw token + hash
+  const rawToken  = crypto.randomBytes(32).toString('hex');
+  const tokenHash = hashToken(rawToken);
+
+  const expiresAt = new Date(
+    Date.now() + env.RESET_TOKEN_EXPIRES_MIN * 60 * 1000,
+  ).toISOString();
+
+  // 3. Xoá token reset cũ của user (nếu có) rồi lưu token mới
+  await supabaseAdmin
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', user.id);
+
+  const { error: insertError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .insert({
+      user_id:    user.id,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+    });
+
+  if (insertError) {
+    console.error('[auth.service] Lỗi lưu reset token:', insertError.message);
+    throw new AppError('Không thể tạo yêu cầu đặt lại mật khẩu. Vui lòng thử lại.', 500);
+  }
+
+  // 4. Gửi email bất đồng bộ — tránh timing attack (user enumeration) và tăng tốc độ phản hồi
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+
+  sendPasswordResetEmail({
+    to:       user.email,
+    name:     user.name,
+    resetUrl,
+  }).catch((err) => {
+    console.error('[auth.service] Lỗi gửi email reset password:', err.message);
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 2.5 Đặt lại mật khẩu bằng token từ email
+ * POST /api/v1/auth/reset-password
+ *
+ * Luồng:
+ *  1. Hash token nhận từ client, tra cứu trong DB
+ *  2. Kiểm tra token hợp lệ và chưa hết hạn
+ *  3. Hash mật khẩu mới và cập nhật vào bảng users
+ *  4. Xóa token đã dùng (một lần duy nhất)
+ *
+ * @param {{ token: string, password: string }} dto
+ */
+export async function resetPassword({ token, password }) {
+  const tokenHash = hashToken(token);
+
+  // 1. Tra cứu token trong DB
+  const { data: resetToken, error: lookupError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .select('user_id, expires_at')
+    .eq('token_hash', tokenHash)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new AppError('Lỗi hệ thống. Vui lòng thử lại.', 500);
+  }
+
+  if (!resetToken) {
+    throw new AppError('Link đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.', 400);
+  }
+
+  // 2. Kiểm tra hết hạn
+  if (new Date(resetToken.expires_at) < new Date()) {
+    await supabaseAdmin
+      .from('password_reset_tokens')
+      .delete()
+      .eq('token_hash', tokenHash);
+    throw new AppError('Link đặt lại mật khẩu đã hết hạn.', 400);
+  }
+
+  // 3. Xóa token đã dùng trước (delete-first pattern để tránh replay attacks)
+  const { error: deleteError } = await supabaseAdmin
+    .from('password_reset_tokens')
+    .delete()
+    .eq('user_id', resetToken.user_id);
+
+  if (deleteError) {
+    console.error('[auth.service] Lỗi xóa reset token:', deleteError.message);
+    throw new AppError('Không thể hoàn tất quá trình đặt lại mật khẩu. Vui lòng thử lại.', 500);
+  }
+
+  // 4. Hash mật khẩu mới và cập nhật vào bảng users
+  const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  const { error: updateError } = await supabaseAdmin
+    .from('users')
+    .update({ password_hash })
+    .eq('id', resetToken.user_id);
+
+  if (updateError) {
+    console.error('[auth.service] Lỗi cập nhật mật khẩu:', updateError.message);
+    throw new AppError('Không thể cập nhật mật khẩu. Vui lòng thử lại.', 500);
+  }
 }

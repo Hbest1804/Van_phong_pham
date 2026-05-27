@@ -129,6 +129,15 @@ export function Login() {
               )}
             </div>
 
+            <div className="flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs text-blue-600 hover:underline"
+              >
+                Quên mật khẩu?
+              </Link>
+            </div>
+
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </Button>

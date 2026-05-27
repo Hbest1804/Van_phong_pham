@@ -107,6 +107,15 @@ async function request<T>(
   return json;
 }
 
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
+export interface ResetPasswordPayload {
+  token: string;
+  password: string;
+}
+
 // ── Auth API ──────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -135,4 +144,25 @@ export const authApi = {
     request<void>('/auth/logout', {
       method: 'POST',
     }),
+
+  /**
+   * POST /api/v1/auth/forgot-password
+   * Gửi email chứa link đặt lại mật khẩu
+   */
+  forgotPassword: (payload: ForgotPasswordPayload) =>
+    request<void>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * POST /api/v1/auth/reset-password
+   * Đặt lại mật khẩu bằng token từ email
+   */
+  resetPassword: (payload: ResetPasswordPayload) =>
+    request<void>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
+
