@@ -33,7 +33,7 @@ export function Home() {
       });
     }, 400);
     return () => clearTimeout(timer);
-  }, [localPrice]);
+  }, [localPrice, priceRange, setSearchParams]);
 
   // State quản lý sản phẩm lấy từ backend
   const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);

@@ -50,10 +50,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       .then(res => {
         if (res.success && res.data) {
           setCategories(res.data);
+        } else {
+          // res.success=false không throw nên phải xử lý tường minh ở đây
+          console.error('Lỗi load danh mục từ API:', res.message);
+          setCategories(initialCategories);
         }
       })
       .catch(err => {
-        console.error('Lỗi load danh mục từ API:', err);
+        console.error('Lỗi kết nối load danh mục:', err);
         setCategories(initialCategories);
       });
 
@@ -61,10 +65,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       .then(res => {
         if (res.success && res.data) {
           setProducts(res.data.products);
+        } else {
+          // res.success=false không throw nên phải xử lý tường minh ở đây
+          console.error('Lỗi load sản phẩm từ API:', res.message);
+          setProducts(initialProducts);
         }
       })
       .catch(err => {
-        console.error('Lỗi load sản phẩm từ API:', err);
+        console.error('Lỗi kết nối load sản phẩm:', err);
         setProducts(initialProducts);
       });
   }, []);
