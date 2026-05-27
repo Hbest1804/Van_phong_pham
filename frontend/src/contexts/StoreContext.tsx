@@ -22,8 +22,14 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const stored = localStorage.getItem('db_products');
+    return stored ? JSON.parse(stored) : [];
+  });
+  const [categories, setCategories] = useState<Category[]>(() => {
+    const stored = localStorage.getItem('db_categories');
+    return stored ? JSON.parse(stored) : [];
+  });
 
   const [orders, setOrders] = useState<Order[]>(() => {
     const stored = localStorage.getItem('db_orders');

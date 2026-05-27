@@ -30,12 +30,12 @@ export function Home() {
     limit: 12
   });
 
+  const page = Number(searchParams.get('page')) || 1;
+
   // Gọi API lấy danh sách sản phẩm khi có thay đổi bộ lọc, tìm kiếm, giá hoặc trang
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
-
-    const page = searchParams.get('page') ? Number(searchParams.get('page')) : 1;
 
     productsApi.getProducts({
       page,
@@ -60,7 +60,7 @@ export function Home() {
     return () => {
       isMounted = false;
     };
-  }, [searchQuery, selectedCategory, priceRange, searchParams]);
+  }, [searchQuery, selectedCategory, priceRange, page]);
 
   // Reset trang về 1 khi đổi danh mục
   const handleCategoryChange = (catId: string) => {
