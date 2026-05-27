@@ -52,7 +52,7 @@ async function request<T>(
   const token = localStorage.getItem('accessToken');
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string>),
   };
@@ -183,6 +183,25 @@ export interface PaginatedProducts {
   };
 }
 
+export interface CreateProductPayload {
+  name: string;
+  description?: string;
+  price: number;
+  stock: number;
+  categoryId: string;
+  imageUrl?: string;
+}
+
+export interface UpdateProductPayload {
+  name?: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  categoryId?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+}
+
 export const productsApi = {
   getProducts: (params: GetProductsParams) => {
     const query = new URLSearchParams();
@@ -202,6 +221,32 @@ export const productsApi = {
     request<Product>(`/products/${id}`, {
       method: 'GET',
     }),
+
+  createProduct: (payload: CreateProductPayload) =>
+    request<Product>('/products', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateProduct: (id: string, payload: UpdateProductPayload) =>
+    request<Product>(`/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteProduct: (id: string) =>
+    request<void>(`/products/${id}`, {
+      method: 'DELETE',
+    }),
+
+  uploadProductImage: (file: File) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return request<{ imageUrl: string }>('/products/upload', {
+      method: 'POST',
+      body: formData,
+    });
+  },
 };
 
 export const categoriesApi = {

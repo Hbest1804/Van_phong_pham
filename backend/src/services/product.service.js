@@ -1,3 +1,5 @@
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -92,6 +94,130 @@ export async function getProducts(query = {}) {
 }
 
 /**
+ * Tạo sản phẩm mới (Admin)
+ *
+ * @param {object} data
+ * @param {string} data.name
+ * @param {string} [data.description]
+ * @param {number} data.price
+ * @param {number} data.stock
+ * @param {string} data.categoryId
+ * @param {string} [data.imageUrl]
+ */
+export async function createProduct(data) {
+  const { name, description = '', price, stock, categoryId, imageUrl = '' } = data;
+
+  // Validate UUID của category
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(categoryId)) {
+    throw new AppError('Mã danh mục không hợp lệ.', 400);
+  }
+
+  const { data: product, error } = await supabaseAdmin
+    .from('products')
+    .insert({
+      name: name.trim(),
+      description: description.trim(),
+      price,
+      stock,
+      category_id: categoryId,
+      image_url: imageUrl.trim(),
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[product.service] Lỗi tạo sản phẩm:', error.message);
+    throw new AppError('Không thể tạo sản phẩm. Vui lòng thử lại.', 500);
+  }
+
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description || '',
+    price: Number(product.price),
+    stock: product.stock,
+    categoryId: product.category_id,
+    image: product.image_url || '',
+    isActive: product.is_active,
+    createdAt: product.created_at,
+    updatedAt: product.updated_at,
+  };
+}
+
+/**
+ * Cập nhật sản phẩm (Admin) — partial update
+ *
+ * @param {string} id
+ * @param {object} data - Chỉ truyền các field cần cập nhật
+ * @param {string}  [data.name]
+ * @param {string}  [data.description]
+ * @param {number}  [data.price]
+ * @param {number}  [data.stock]
+ * @param {string}  [data.categoryId]
+ * @param {string}  [data.imageUrl]
+ * @param {boolean} [data.isActive]
+ */
+export async function updateProduct(id, data) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Validate id
+  if (!uuidRegex.test(id)) {
+    throw new AppError('Mã sản phẩm không hợp lệ.', 400);
+  }
+
+  // Build payload chỉ với các field được gửi lên (partial update)
+  const payload = {};
+  if (data.name !== undefined) payload.name = data.name.trim();
+  if (data.description !== undefined) payload.description = data.description.trim();
+  if (data.price !== undefined) payload.price = data.price;
+  if (data.stock !== undefined) payload.stock = data.stock;
+  if (data.isActive !== undefined) payload.is_active = data.isActive;
+  if (data.imageUrl !== undefined) payload.image_url = data.imageUrl.trim();
+
+  if (data.categoryId !== undefined) {
+    if (!uuidRegex.test(data.categoryId)) {
+      throw new AppError('Mã danh mục không hợp lệ.', 400);
+    }
+    payload.category_id = data.categoryId;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    throw new AppError('Không có dữ liệu nào được cập nhật.', 400);
+  }
+
+  const { data: product, error } = await supabaseAdmin
+    .from('products')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('[product.service] Lỗi cập nhật sản phẩm:', error.message);
+    throw new AppError('Không thể cập nhật sản phẩm.', 500);
+  }
+
+  if (!product) {
+    throw new AppError('Sản phẩm không tồn tại.', 404);
+  }
+
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description || '',
+    price: Number(product.price),
+    stock: product.stock,
+    categoryId: product.category_id,
+    image: product.image_url || '',
+    isActive: product.is_active,
+    createdAt: product.created_at,
+    updatedAt: product.updated_at,
+  };
+}
+
+/**
  * Lấy chi tiết sản phẩm theo ID
  * @param {string} id 
  */
@@ -130,3 +256,76 @@ export async function getProductById(id) {
     updatedAt: product.updated_at,
   };
 }
+
+/**
+ * Xóa sản phẩm theo ID (Admin)
+ * @param {string} id
+ */
+export async function deleteProduct(id) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(id)) {
+    throw new AppError('Mã sản phẩm không hợp lệ.', 400);
+  }
+
+  // Kiểm tra sản phẩm tồn tại trước khi xóa
+  const { data: existing, error: findError } = await supabaseAdmin
+    .from('products')
+    .select('id')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (findError) {
+    console.error('[product.service] Lỗi kiểm tra sản phẩm:', findError.message);
+    throw new AppError('Không thể xóa sản phẩm. Vui lòng thử lại.', 500);
+  }
+
+  if (!existing) {
+    throw new AppError('Sản phẩm không tồn tại.', 404);
+  }
+
+  const { error } = await supabaseAdmin
+    .from('products')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('[product.service] Lỗi xóa sản phẩm:', error.message);
+    throw new AppError('Không thể xóa sản phẩm. Vui lòng thử lại.', 500);
+  }
+}
+
+/**
+ * Tải lên ảnh sản phẩm lên Supabase Storage bucket 'products'
+ * @param {object} file - File object từ multer (memoryStorage)
+ * @returns {Promise<string>} URL công khai của hình ảnh
+ */
+export async function uploadProductImage(file) {
+  if (!file) {
+    throw new AppError('Không có tập tin nào được tải lên.', 400);
+  }
+
+  const fileExt = path.extname(file.originalname) || '.jpg';
+  const fileName = `${uuidv4()}${fileExt}`;
+
+  // Tải buffer lên bucket 'products'
+  const { data, error } = await supabaseAdmin.storage
+    .from('products')
+    .upload(fileName, file.buffer, {
+      contentType: file.mimetype,
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) {
+    console.error('[product.service] Lỗi tải ảnh lên Supabase Storage:', error);
+    throw new AppError(`Tải ảnh lên Supabase thất bại: ${error.message}`, 500);
+  }
+
+  // Lấy URL công khai
+  const { data: { publicUrl } } = supabaseAdmin.storage
+    .from('products')
+    .getPublicUrl(fileName);
+
+  return publicUrl;
+}
+
