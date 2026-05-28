@@ -249,10 +249,37 @@ export const productsApi = {
   },
 };
 
+export interface CreateCategoryPayload {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateCategoryPayload {
+  name?: string;
+  description?: string;
+}
+
 export const categoriesApi = {
   getCategories: () =>
     request<Category[]>('/categories', {
       method: 'GET',
+    }),
+
+  createCategory: (payload: CreateCategoryPayload) =>
+    request<Category>('/categories', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  updateCategory: (id: string, payload: UpdateCategoryPayload) =>
+    request<Category>(`/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
+
+  deleteCategory: (id: string) =>
+    request<void>(`/categories/${id}`, {
+      method: 'DELETE',
     }),
 };
 

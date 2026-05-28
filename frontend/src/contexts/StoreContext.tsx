@@ -12,9 +12,9 @@ interface StoreContextType {
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
-  addCategory: (name: string) => void;
-  updateCategory: (id: string, name: string) => void;
-  deleteCategory: (id: string) => void;
+  addCategory: (name: string, description?: string) => Promise<void>;
+  updateCategory: (id: string, name: string) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
   addOrder: (order: Order) => void;
   updateOrderStatus: (id: string, status: Order['status']) => void;
   toggleUserStatus: (id: string) => void;
@@ -115,16 +115,46 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     setProducts(products.filter(p => p.id !== id));
   };
 
-  const addCategory = (name: string) => {
-    setCategories([...categories, { id: Math.random().toString(36).substr(2, 9), name }]);
+  const addCategory = async (name: string, description?: string) => {
+    try {
+      const res = await categoriesApi.createCategory({ name, description });
+      if (res.success && res.data) {
+        setCategories(prev => [...prev, res.data!]);
+      } else {
+        alert(res.message || 'Lỗi thêm danh mục');
+      }
+    } catch (err) {
+      console.error('Lỗi thêm danh mục:', err);
+      alert('Lỗi kết nối khi thêm danh mục');
+    }
   };
 
-  const updateCategory = (id: string, name: string) => {
-    setCategories(categories.map(c => c.id === id ? { ...c, name } : c));
+  const updateCategory = async (id: string, name: string) => {
+    try {
+      const res = await categoriesApi.updateCategory(id, { name });
+      if (res.success && res.data) {
+        setCategories(prev => prev.map(c => c.id === id ? res.data! : c));
+      } else {
+        alert(res.message || 'Lỗi cập nhật danh mục');
+      }
+    } catch (err) {
+      console.error('Lỗi cập nhật danh mục:', err);
+      alert('Lỗi kết nối khi cập nhật danh mục');
+    }
   };
 
-  const deleteCategory = (id: string) => {
-    setCategories(categories.filter(c => c.id !== id));
+  const deleteCategory = async (id: string) => {
+    try {
+      const res = await categoriesApi.deleteCategory(id);
+      if (res.success) {
+        setCategories(prev => prev.filter(c => c.id !== id));
+      } else {
+        alert(res.message || 'Lỗi xóa danh mục');
+      }
+    } catch (err) {
+      console.error('Lỗi xóa danh mục:', err);
+      alert('Lỗi kết nối khi xóa danh mục');
+    }
   };
 
   const addOrder = (order: Order) => {
