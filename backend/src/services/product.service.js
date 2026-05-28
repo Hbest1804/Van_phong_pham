@@ -105,7 +105,7 @@ export async function getProducts(query = {}) {
  * @param {string} [data.imageUrl]
  */
 export async function createProduct(data) {
-  const { name, description = '', price, stock, categoryId, imageUrl = '' } = data;
+  const { name, description, price, stock, categoryId, imageUrl } = data;
 
   // Validate UUID của category
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -116,12 +116,12 @@ export async function createProduct(data) {
   const { data: product, error } = await supabaseAdmin
     .from('products')
     .insert({
-      name: name.trim(),
-      description: description.trim(),
+      name: (name || '').trim(),
+      description: (description || '').trim(),
       price,
       stock,
       category_id: categoryId,
-      image_url: imageUrl.trim(),
+      image_url: (imageUrl || '').trim(),
       is_active: true,
     })
     .select()
@@ -169,12 +169,12 @@ export async function updateProduct(id, data) {
 
   // Build payload chỉ với các field được gửi lên (partial update)
   const payload = {};
-  if (data.name !== undefined) payload.name = data.name.trim();
-  if (data.description !== undefined) payload.description = data.description.trim();
+  if (data.name !== undefined) payload.name = data.name ? data.name.trim() : '';
+  if (data.description !== undefined) payload.description = data.description ? data.description.trim() : null;
   if (data.price !== undefined) payload.price = data.price;
   if (data.stock !== undefined) payload.stock = data.stock;
   if (data.isActive !== undefined) payload.is_active = data.isActive;
-  if (data.imageUrl !== undefined) payload.image_url = data.imageUrl.trim();
+  if (data.imageUrl !== undefined) payload.image_url = data.imageUrl ? data.imageUrl.trim() : null;
 
   if (data.categoryId !== undefined) {
     if (!uuidRegex.test(data.categoryId)) {
