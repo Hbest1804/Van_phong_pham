@@ -98,13 +98,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         const localItems = [...itemsRef.current];
         if (localItems.length > 0) {
           setIsLoading(true);
-          try {
-            // Đẩy tất cả local items lên server tuần tự để tránh nghẽn/rate-limiting/race condition
-            for (const item of localItems) {
-              await cartApi.addToCart(item.product.id, item.quantity);
+          // Đẩy tất cả local items lên server tuần tự để tránh nghẽn/rate-limiting/race condition
+          for (const item of localItems) {
+            try {
+              const res = await cartApi.addToCart(item.product.id, item.quantity);
+              if (!res.success) {
+                console.error(`[CartContext] Lỗi đồng bộ SP ${item.product.name}:`, res.message);
+              }
+            } catch (err) {
+              console.error(`[CartContext] Lỗi đồng bộ SP ${item.product.name}:`, err);
             }
-          } catch (err) {
-            console.error('[CartContext] Lỗi đồng bộ giỏ hàng vô danh lên server:', err);
           }
         }
         // Đồng bộ lại giỏ hàng từ server
@@ -124,6 +127,22 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Thêm sản phẩm vào giỏ.
    */
   const addItem = async (product: Product, quantity = 1) => {
+    const previousItems = [...items];
+    const previousIds = { ...cartItemIds };
+
+    // Optimistically update local UI immediately
+    setItems(prev => {
+      const existing = prev.find(item => item.product.id === product.id);
+      if (existing) {
+        return prev.map(item =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        );
+      }
+      return [...prev, { product, quantity }];
+    });
+
     if (user) {
       setIsLoading(true);
       try {
@@ -131,35 +150,20 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         if (res.success && res.data) {
           // Lưu cartItemId mới nhận về
           setCartItemIds(prev => ({ ...prev, [product.id]: res.data!.cartItemId }));
-          setItems(prev => {
-            const existing = prev.find(item => item.product.id === product.id);
-            if (existing) {
-              return prev.map(item =>
-                item.product.id === product.id
-                  ? { ...item, quantity: item.quantity + quantity }
-                  : item
-              );
-            }
-            return [...prev, { product, quantity }];
-          });
+        } else {
+          console.error('[CartContext] Lỗi thêm vào giỏ:', res.message);
+          // Rollback
+          setItems(previousItems);
+          setCartItemIds(previousIds);
         }
       } catch (err) {
         console.error('[CartContext] Lỗi thêm vào giỏ:', err);
+        // Rollback
+        setItems(previousItems);
+        setCartItemIds(previousIds);
       } finally {
         setIsLoading(false);
       }
-    } else {
-      setItems(prev => {
-        const existing = prev.find(item => item.product.id === product.id);
-        if (existing) {
-          return prev.map(item =>
-            item.product.id === product.id
-              ? { ...item, quantity: item.quantity + quantity }
-              : item
-          );
-        }
-        return [...prev, { product, quantity }];
-      });
     }
   };
 
@@ -167,6 +171,12 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá một sản phẩm khỏi giỏ.
    */
   const removeItem = async (productId: string) => {
+    const previousItems = [...items];
+    const previousIds = { ...cartItemIds };
+
+    // Optimistically update local UI immediately
+    setItems(prev => prev.filter(item => item.product.id !== productId));
+
     if (user) {
       let cartItemId = cartItemIds[productId];
       if (!cartItemId) {
@@ -183,6 +193,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const res = await cartApi.removeFromCart(cartItemId);
           if (res && !res.success) {
             console.error('[CartContext] Lỗi xoá sản phẩm:', res.message);
+            // Rollback
+            setItems(previousItems);
+            setCartItemIds(previousIds);
             return;
           }
           setCartItemIds(prev => {
@@ -192,16 +205,21 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           });
         } catch (err) {
           console.error('[CartContext] Lỗi xoá sản phẩm:', err);
+          // Rollback
+          setItems(previousItems);
+          setCartItemIds(previousIds);
           return;
         } finally {
           setIsLoading(false);
         }
       } else {
         console.warn(`[CartContext] Không tìm thấy cartItemId cho sản phẩm ${productId} trên server.`);
+        // Rollback
+        setItems(previousItems);
+        setCartItemIds(previousIds);
         return;
       }
     }
-    setItems(prev => prev.filter(item => item.product.id !== productId));
   };
 
   /**
@@ -212,6 +230,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       await removeItem(productId);
       return;
     }
+
+    const previousItems = [...items];
+    const previousIds = { ...cartItemIds };
+
+    // Optimistically update local UI immediately
+    setItems(prev =>
+      prev.map(item =>
+        item.product.id === productId ? { ...item, quantity } : item
+      )
+    );
 
     if (user) {
       let cartItemId = cartItemIds[productId];
@@ -229,11 +257,17 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const res = await cartApi.updateCartItem(cartItemId, quantity);
           if (!res.success) {
             console.error('[CartContext] Lỗi cập nhật số lượng:', res.message);
+            // Rollback
+            setItems(previousItems);
+            setCartItemIds(previousIds);
             return;
           }
         } catch (err) {
           console.error('[CartContext] Lỗi cập nhật số lượng:', err);
-          return; // Không cập nhật local nếu server lỗi
+          // Rollback
+          setItems(previousItems);
+          setCartItemIds(previousIds);
+          return;
         } finally {
           setIsLoading(false);
         }
@@ -246,45 +280,56 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
             setCartItemIds(prev => ({ ...prev, [productId]: res.data!.cartItemId }));
           } else {
             console.error('[CartContext] Lỗi tự động thêm vào giỏ:', res.message);
+            // Rollback
+            setItems(previousItems);
+            setCartItemIds(previousIds);
             return;
           }
         } catch (err) {
           console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
+          // Rollback
+          setItems(previousItems);
+          setCartItemIds(previousIds);
           return;
         } finally {
           setIsLoading(false);
         }
       }
     }
-
-    setItems(prev =>
-      prev.map(item =>
-        item.product.id === productId ? { ...item, quantity } : item
-      )
-    );
   };
 
   /**
    * Xoá toàn bộ giỏ hàng.
    */
   const clearCart = async () => {
+    const previousItems = [...items];
+    const previousIds = { ...cartItemIds };
+
+    // Optimistically update local UI immediately
+    setItems([]);
+
     if (user) {
       setIsLoading(true);
       try {
         const res = await cartApi.clearCart();
         if (res && !res.success) {
           console.error('[CartContext] Lỗi xoá giỏ hàng:', res.message);
+          // Rollback
+          setItems(previousItems);
+          setCartItemIds(previousIds);
           return;
         }
         setCartItemIds({});
       } catch (err) {
         console.error('[CartContext] Lỗi xoá giỏ hàng:', err);
+        // Rollback
+        setItems(previousItems);
+        setCartItemIds(previousIds);
         return;
       } finally {
         setIsLoading(false);
       }
     }
-    setItems([]);
   };
 
   const total = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);

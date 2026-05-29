@@ -99,12 +99,23 @@ export async function addToCart(userId, productId, quantity = 1) {
     throw new AppError('Số lượng phải là số nguyên lớn hơn 0.', 400);
   }
 
-  // ── 1. Kiểm tra sản phẩm tồn tại & active ───────────────────────────────
-  const { data: product, error: productError } = await supabaseAdmin
-    .from('products')
-    .select('id, name, stock, is_active')
-    .eq('id', productId)
-    .maybeSingle();
+  // ── 1 & 2. Kiểm tra sản phẩm và giỏ hàng đồng thời (Single Roundtrip) ───
+  const [productRes, existingRes] = await Promise.all([
+    supabaseAdmin
+      .from('products')
+      .select('id, name, stock, is_active')
+      .eq('id', productId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('cart_items')
+      .select('id, quantity')
+      .eq('user_id', userId)
+      .eq('product_id', productId)
+      .maybeSingle()
+  ]);
+
+  const { data: product, error: productError } = productRes;
+  const { data: existing, error: findError } = existingRes;
 
   if (productError) {
     console.error('[cart.service] Lỗi kiểm tra sản phẩm:', productError.message);
@@ -116,14 +127,6 @@ export async function addToCart(userId, productId, quantity = 1) {
   if (!product.is_active) {
     throw new AppError('Sản phẩm đã ngừng kinh doanh.', 400);
   }
-
-  // ── 2. Kiểm tra item đã có trong giỏ chưa ───────────────────────────────
-  const { data: existing, error: findError } = await supabaseAdmin
-    .from('cart_items')
-    .select('id, quantity')
-    .eq('user_id', userId)
-    .eq('product_id', productId)
-    .maybeSingle();
 
   if (findError) {
     console.error('[cart.service] Lỗi kiểm tra giỏ hàng:', findError.message);
@@ -236,10 +239,19 @@ export async function updateCartItem(userId, cartItemId, quantity) {
     throw new AppError('Số lượng phải là số nguyên lớn hơn 0.', 400);
   }
 
-  // ── 1. Lấy cart item + kiểm tra quyền sở hữu ────────────────────────────
+  // ── 1 & 2. Lấy mục giỏ hàng kèm thông tin sản phẩm bằng JOIN (Single Roundtrip) ──
   const { data: cartItem, error: findError } = await supabaseAdmin
     .from('cart_items')
-    .select('id, user_id, product_id, quantity')
+    .select(`
+      id,
+      user_id,
+      product_id,
+      quantity,
+      products (
+        stock,
+        is_active
+      )
+    `)
     .eq('id', cartItemId)
     .maybeSingle();
 
@@ -254,17 +266,7 @@ export async function updateCartItem(userId, cartItemId, quantity) {
     throw new AppError('Bạn không có quyền chỉnh sửa mục này.', 403);
   }
 
-  // ── 2. Kiểm tra tồn kho ──────────────────────────────────────────────────
-  const { data: product, error: productError } = await supabaseAdmin
-    .from('products')
-    .select('stock, is_active')
-    .eq('id', cartItem.product_id)
-    .maybeSingle();
-
-  if (productError) {
-    console.error('[cart.service] Lỗi kiểm tra sản phẩm:', productError.message);
-    throw new AppError('Không thể kiểm tra sản phẩm. Vui lòng thử lại.', 500);
-  }
+  const product = cartItem.products;
   if (!product) {
     throw new AppError('Sản phẩm không tồn tại.', 404);
   }
