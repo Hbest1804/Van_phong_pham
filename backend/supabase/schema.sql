@@ -396,6 +396,8 @@ DECLARE
   v_stock INT;
   v_is_active BOOLEAN;
   v_cart_item_id UUID;
+  v_product_id UUID;      -- biến tạm tránh ambiguous với output column
+  v_quantity INT;         -- biến tạm tránh ambiguous với output column
   v_existing_quantity INT;
   v_message TEXT;
 BEGIN
@@ -419,16 +421,18 @@ BEGIN
   WHERE user_id = p_user_id AND cart_items.product_id = p_product_id;
 
   -- 3. Thực hiện insert hoặc update atomically
+  --    Dùng v_product_id / v_quantity để tránh "column reference is ambiguous"
   INSERT INTO cart_items (user_id, product_id, quantity)
   VALUES (p_user_id, p_product_id, p_quantity)
   ON CONFLICT (user_id, product_id)
-  DO UPDATE SET 
-    quantity = cart_items.quantity + EXCLUDED.quantity,
+  DO UPDATE SET
+    quantity   = cart_items.quantity + EXCLUDED.quantity,
     updated_at = NOW()
-  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity INTO v_cart_item_id, product_id, quantity;
+  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity
+       INTO v_cart_item_id,  v_product_id,          v_quantity;
 
   -- 4. Kiểm tra số lượng sau khi cập nhật để tránh race condition vượt quá tồn kho
-  IF quantity > v_stock THEN
+  IF v_quantity > v_stock THEN
     RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
   END IF;
 
@@ -439,9 +443,12 @@ BEGIN
     v_message := 'Đã thêm sản phẩm vào giỏ hàng.';
   END IF;
 
-  id := v_cart_item_id;
-  message := v_message;
-  
+  -- Gán giá trị vào các output column của RETURNS TABLE
+  id         := v_cart_item_id;
+  product_id := v_product_id;
+  quantity   := v_quantity;
+  message    := v_message;
+
   RETURN NEXT;
 END;
 $$ LANGUAGE plpgsql;
