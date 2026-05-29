@@ -30,10 +30,14 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const [cartItemIds, setCartItemIds] = useState<CartItemIdMap>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  // Persist vào localStorage khi items thay đổi
+  // Chỉ lưu local cart khi chưa đăng nhập, xoá đi khi đã đăng nhập
   useEffect(() => {
-    localStorage.setItem('cart_items', JSON.stringify(items));
-  }, [items]);
+    if (!user) {
+      localStorage.setItem('cart_items', JSON.stringify(items));
+    } else {
+      localStorage.removeItem('cart_items');
+    }
+  }, [items, user]);
 
   /**
    * Đồng bộ giỏ hàng từ server.
@@ -67,6 +71,12 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     return null;
   };
 
+  // Sử dụng itemsRef để tránh stale closure trong useEffect lắng nghe auth thay đổi
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   // Đồng bộ hoặc merge khi trạng thái đăng nhập (user) thay đổi
   const prevUserRef = useRef<any>(undefined);
 
@@ -85,7 +95,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
       // Đăng nhập (Guest -> Member)
       if (user && !prevUser) {
-        const localItems = [...items];
+        const localItems = [...itemsRef.current];
         if (localItems.length > 0) {
           setIsLoading(true);
           try {
@@ -110,7 +120,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     handleAuthChange();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   /**
