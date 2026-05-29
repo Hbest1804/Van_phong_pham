@@ -32,6 +32,7 @@ export function Checkout() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;   // chặn double-submit (double-click / Enter liên tục)
     setError('');
 
     if (!address.trim()) {

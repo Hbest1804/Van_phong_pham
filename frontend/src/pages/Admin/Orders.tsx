@@ -19,6 +19,13 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: 'bg-rose-100 text-rose-800 border-rose-200',
 };
 
+const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+  pending: ['pending', 'shipping', 'cancelled'],
+  shipping: ['shipping', 'completed', 'cancelled'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+};
+
 export function Orders() {
   const [orders, setOrders]           = useState<OrderApi[]>([]);
   const [loading, setLoading]         = useState(true);
@@ -167,7 +174,9 @@ export function Orders() {
                           onBlur={() => !isUpdating && setEditingId(null)}
                           autoFocus
                         >
-                          {STATUS_OPTIONS.filter(s => s.value !== '').map(s => (
+                          {STATUS_OPTIONS.filter(
+                            s => s.value !== '' && (ALLOWED_TRANSITIONS[order.status] || []).includes(s.value)
+                          ).map(s => (
                             <option key={s.value} value={s.value}>{s.label}</option>
                           ))}
                         </select>

@@ -49,7 +49,12 @@ function mapOrder(row) {
  */
 export async function createOrder(userId, { address, paymentMethod = 'cod', note = '' }) {
   if (!userId) throw new AppError('ID người dùng không hợp lệ.', 400);
-  if (!address || !address.trim()) throw new AppError('Địa chỉ giao hàng không được để trống.', 400);
+  if (typeof address !== 'string' || !address.trim()) {
+    throw new AppError('Địa chỉ giao hàng không được để trống và phải là chuỗi ký tự.', 400);
+  }
+  if (note !== undefined && note !== null && typeof note !== 'string') {
+    throw new AppError('Ghi chú phải là chuỗi ký tự.', 400);
+  }
 
   const validMethods = ['cod', 'transfer'];
   if (!validMethods.includes(paymentMethod)) {
@@ -273,6 +278,11 @@ export async function updateOrderStatus(orderId, newStatus) {
     throw new AppError('Không thể tìm đơn hàng.', 500);
   }
   if (!existing) throw new AppError('Đơn hàng không tồn tại.', 404);
+
+  // Xử lý khi trạng thái mới trùng trạng thái hiện tại
+  if (existing.status === newStatus) {
+    return getOrderById(orderId, { role: 'admin' });
+  }
 
   // Kiểm tra luồng chuyển trạng thái hợp lệ
   const allowedTransitions = {
