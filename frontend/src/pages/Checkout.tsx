@@ -59,14 +59,14 @@ export function Checkout() {
 
   if (isSuccess) {
     return (
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.8 }} 
-        animate={{ opacity: 1, scale: 1 }} 
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
         className="max-w-md mx-auto mt-20 text-center bg-white/80 backdrop-blur-xl p-10 rounded-3xl shadow-2xl border border-white"
       >
-        <motion.div 
-          initial={{ scale: 0 }} 
-          animate={{ scale: 1 }} 
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
           transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
           className="w-24 h-24 bg-gradient-to-br from-emerald-400 to-teal-500 text-white rounded-full flex items-center justify-center mx-auto mb-8 shadow-lg"
         >
@@ -125,8 +125,8 @@ export function Checkout() {
               {items.map(({ product, quantity }) => (
                 <li key={product.id} className="flex justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-slate-100 mb-2">
                   <div className="flex items-center gap-3">
-                     <img src={product.image} className="w-12 h-12 rounded bg-slate-100 object-cover" alt={product.name}/>
-                     <span className="text-slate-800 font-semibold line-clamp-1">{quantity} x {product.name}</span>
+                    <img src={product.image} className="w-12 h-12 rounded bg-slate-100 object-cover" alt={product.name} />
+                    <span className="text-slate-800 font-semibold line-clamp-1">{quantity} x {product.name}</span>
                   </div>
                   <span className="font-bold text-slate-900 whitespace-nowrap">{formatCurrency(product.price * quantity)}</span>
                 </li>

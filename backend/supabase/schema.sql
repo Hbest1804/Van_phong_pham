@@ -199,7 +199,30 @@ CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id
 
 
 -- ============================================================
--- 8. TRIGGER: tự động cập nhật cột updated_at
+-- 8. BẢNG: cart_items
+--    Giỏ hàng phía server — mỗi row là 1 sản phẩm trong giỏ của 1 user.
+--    UNIQUE (user_id, product_id) đảm bảo không trùng sản phẩm.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS cart_items (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users    (id) ON DELETE CASCADE,
+  product_id  UUID        NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  quantity    INTEGER     NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, product_id)   -- mỗi sản phẩm chỉ xuất hiện 1 lần trong giỏ
+);
+
+COMMENT ON TABLE  cart_items          IS 'Giỏ hàng phía server — mỗi row là 1 sản phẩm trong giỏ của 1 user';
+COMMENT ON COLUMN cart_items.quantity IS 'Số lượng sản phẩm, phải > 0';
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_cart_items_user_id    ON cart_items (user_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON cart_items (product_id);
+
+
+-- ============================================================
+-- 9. TRIGGER: tự động cập nhật cột updated_at
 -- ============================================================
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -214,7 +237,7 @@ DO $$
 DECLARE
   t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['users','categories','products','orders'] LOOP
+  FOREACH t IN ARRAY ARRAY['users','categories','products','orders','cart_items'] LOOP
     EXECUTE format('
       DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I;
       CREATE TRIGGER trg_%s_updated_at
@@ -226,7 +249,7 @@ END $$;
 
 
 -- ============================================================
--- 9. TRIGGER: giảm tồn kho khi tạo order_item mới
+-- 10. TRIGGER: giảm tồn kho khi tạo order_item mới
 -- ============================================================
 CREATE OR REPLACE FUNCTION decrease_product_stock()
 RETURNS TRIGGER AS $$
@@ -246,7 +269,7 @@ CREATE OR REPLACE TRIGGER trg_order_items_decrease_stock
 
 
 -- ============================================================
--- 10. TRIGGER: quản lý kho khi trạng thái đơn hàng thay đổi
+-- 11. TRIGGER: quản lý kho khi trạng thái đơn hàng thay đổi
 --     a) Hoàn kho khi chuyển → cancelled
 --     b) Enforce: cancelled là trạng thái cuối (terminal state)
 -- ============================================================
@@ -279,7 +302,7 @@ CREATE OR REPLACE TRIGGER trg_orders_manage_stock
 
 
 -- ============================================================
--- 11. TRIGGER: hoàn kho khi đơn hàng bị xoá cứng (hard delete)
+-- 12. TRIGGER: hoàn kho khi đơn hàng bị xoá cứng (hard delete)
 --     ON DELETE CASCADE xoá order_items trước khi trigger này chạy,
 --     nên ta xử lý ở BEFORE DELETE để đọc được items.
 -- ============================================================
@@ -305,7 +328,7 @@ CREATE OR REPLACE TRIGGER trg_orders_restore_stock_on_delete
 
 
 -- ============================================================
--- 11. ROW LEVEL SECURITY (RLS) — Tuỳ chọn nếu dùng Supabase Auth
+-- 13. ROW LEVEL SECURITY (RLS) — Tuỳ chọn nếu dùng Supabase Auth
 --     Bỏ qua nếu backend tự xử lý auth bằng service_role key
 -- ============================================================
 
@@ -322,7 +345,7 @@ CREATE OR REPLACE TRIGGER trg_orders_restore_stock_on_delete
 
 
 -- ============================================================
--- 12. DỮ LIỆU MẪU (Seed Data)
+-- 14. DỮ LIỆU MẪU (Seed Data)
 -- ============================================================
 
 -- ---- Danh mục ----

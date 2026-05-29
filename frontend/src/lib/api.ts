@@ -283,4 +283,65 @@ export const categoriesApi = {
     }),
 };
 
+// ── Cart API ──────────────────────────────────────────────────────────────────
 
+export interface CartItemApi {
+  cartItemId: string;
+  quantity: number;
+  product: Product;
+}
+
+export interface CartData {
+  items: CartItemApi[];
+  totalPrice: number;
+  itemCount: number;
+}
+
+export const cartApi = {
+  /**
+   * GET /api/v1/cart
+   * Lấy toàn bộ sản phẩm trong giỏ hàng của người dùng đã đăng nhập.
+   */
+  getCart: () =>
+    request<CartData>('/cart', {
+      method: 'GET',
+    }),
+
+  /**
+   * POST /api/v1/cart
+   * Thêm sản phẩm vào giỏ hàng (hoặc tăng số lượng nếu đã có).
+   */
+  addToCart: (productId: string, quantity = 1) =>
+    request<{ cartItemId: string; productId: string; quantity: number; message: string }>('/cart', {
+      method: 'POST',
+      body: JSON.stringify({ productId, quantity }),
+    }),
+
+  /**
+   * PUT /api/v1/cart/:cartItemId
+   * Cập nhật số lượng sản phẩm trong giỏ hàng.
+   */
+  updateCartItem: (cartItemId: string, quantity: number) =>
+    request<{ cartItemId: string; productId: string; quantity: number }>(`/cart/${cartItemId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ quantity }),
+    }),
+
+  /**
+   * DELETE /api/v1/cart/:cartItemId
+   * Xoá một sản phẩm khỏi giỏ hàng.
+   */
+  removeFromCart: (cartItemId: string) =>
+    request<void>(`/cart/${cartItemId}`, {
+      method: 'DELETE',
+    }),
+
+  /**
+   * DELETE /api/v1/cart
+   * Xoá toàn bộ giỏ hàng.
+   */
+  clearCart: () =>
+    request<void>('/cart', {
+      method: 'DELETE',
+    }),
+};
