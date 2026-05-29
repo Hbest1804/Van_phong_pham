@@ -25,11 +25,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user]);
 
   const [items, setItems] = useState<CartItem[]>(() => {
-    const storedUser = localStorage.getItem('auth_user');
-    const userObj = storedUser ? JSON.parse(storedUser) : null;
-    const key = userObj ? `cart_items_${userObj.id}` : 'cart_items';
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const storedUser = localStorage.getItem('auth_user');
+      const userObj = storedUser ? JSON.parse(storedUser) : null;
+      const key = userObj ? `cart_items_${userObj.id}` : 'cart_items';
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch (err) {
+      console.error('[CartContext] Error parsing cart/user from localStorage:', err);
+      return [];
+    }
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -211,6 +216,12 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá một sản phẩm khỏi giỏ.
    */
   const removeItem = async (productId: string) => {
+    const pending = pendingUpdatesRef.current[productId];
+    if (pending && pending.timeoutId) {
+      clearTimeout(pending.timeoutId);
+      delete pendingUpdatesRef.current[productId];
+    }
+
     const oldItem = itemsRef.current.find(item => item.product.id === productId);
 
     // Optimistically update local UI immediately using functional state update
@@ -315,10 +326,15 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     }, 300); // Debounce 300ms
   };
 
-  /**
-   * Xoá toàn bộ giỏ hàng.
-   */
   const clearCart = async () => {
+    if (pendingUpdatesRef.current) {
+      Object.keys(pendingUpdatesRef.current).forEach(key => {
+        const pending = pendingUpdatesRef.current[key];
+        if (pending && pending.timeoutId) clearTimeout(pending.timeoutId);
+      });
+      pendingUpdatesRef.current = {};
+    }
+
     const previousItems = [...itemsRef.current];
 
     // Optimistically update local UI immediately
