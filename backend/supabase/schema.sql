@@ -428,9 +428,9 @@ BEGIN
   END IF;
 
   -- 4. Thực hiện insert hoặc update atomically
-  INSERT INTO cart_items (user_id, cart_items.product_id, cart_items.quantity)
+  INSERT INTO cart_items (user_id, product_id, quantity)
   VALUES (p_user_id, p_product_id, p_quantity)
-  ON CONFLICT (user_id, cart_items.product_id)
+  ON CONFLICT (user_id, product_id)
   DO UPDATE SET 
     quantity = cart_items.quantity + EXCLUDED.quantity,
     updated_at = NOW()
