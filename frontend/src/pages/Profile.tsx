@@ -28,11 +28,6 @@ export function Profile() {
   const [page, setPage]             = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   const fetchOrders = useCallback(async (p: number) => {
     setOrdersLoading(true);
     setOrdersError('');
@@ -51,10 +46,15 @@ export function Profile() {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
-    fetchOrders(page);
-  }, [fetchOrders, page]);
+    if (user) {
+      fetchOrders(page);
+    }
+  }, [fetchOrders, page, user]);
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();

@@ -484,3 +484,94 @@ BEGIN
     updated_at = NOW();
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 17. HÀM DATABASE: create_order_transaction
+--     Tạo đơn hàng từ giỏ hàng một cách hoàn toàn nguyên tử (atomic).
+--     Toàn bộ các bước: validate → INSERT orders → INSERT order_items
+--     (trigger giảm tồn kho) → DELETE cart_items đều nằm trong một
+--     transaction duy nhất — đảm bảo tính toàn vẹn dữ liệu.
+--
+--     Error codes:
+--       P0001 — Giỏ hàng trống
+--       P0002 — Sản phẩm ngừng kinh doanh
+--       P0003 — Vượt quá tồn kho
+-- ============================================================
+CREATE OR REPLACE FUNCTION create_order_transaction(
+  p_user_id        UUID,
+  p_address        TEXT,
+  p_payment_method TEXT,
+  p_note           TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_order_id UUID;
+  v_total    NUMERIC := 0;
+  v_item     RECORD;
+BEGIN
+  -- 1. Kiểm tra giỏ hàng không rỗng (tồn tại ít nhất 1 sản phẩm)
+  IF NOT EXISTS (
+    SELECT 1 FROM cart_items WHERE user_id = p_user_id
+  ) THEN
+    RAISE EXCEPTION 'Giỏ hàng trống. Vui lòng thêm sản phẩm trước khi đặt hàng.'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 2. Validate từng sản phẩm và tính tổng tiền
+  FOR v_item IN
+    SELECT
+      ci.quantity,
+      p.id        AS product_id,
+      p.name      AS product_name,
+      p.price,
+      p.stock,
+      p.is_active
+    FROM cart_items ci
+    JOIN products p ON p.id = ci.product_id
+    WHERE ci.user_id = p_user_id
+  LOOP
+    IF NOT v_item.is_active THEN
+      RAISE EXCEPTION 'Sản phẩm "%" đã ngừng kinh doanh.', v_item.product_name
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    IF v_item.quantity > v_item.stock THEN
+      RAISE EXCEPTION 'Sản phẩm "%" không đủ tồn kho. Hiện còn % sản phẩm.',
+        v_item.product_name, v_item.stock
+        USING ERRCODE = 'P0003';
+    END IF;
+
+    v_total := v_total + v_item.price * v_item.quantity;
+  END LOOP;
+
+  -- 3. Tạo đơn hàng
+  INSERT INTO orders (user_id, status, total, address, payment_method, note)
+  VALUES (
+    p_user_id,
+    'pending',
+    v_total,
+    p_address,
+    p_payment_method::payment_method,
+    p_note
+  )
+  RETURNING orders.id INTO v_order_id;
+
+  -- 4. Tạo order_items — trigger trg_order_items_decrease_stock sẽ tự giảm tồn kho
+  INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
+  SELECT
+    v_order_id,
+    p.id,
+    p.name,
+    ci.quantity,
+    p.price
+  FROM cart_items ci
+  JOIN products p ON p.id = ci.product_id
+  WHERE ci.user_id = p_user_id;
+
+  -- 5. Xoá giỏ hàng sau khi đặt hàng thành công
+  DELETE FROM cart_items WHERE user_id = p_user_id;
+
+  RETURN v_order_id;
+END;
+$$ LANGUAGE plpgsql;

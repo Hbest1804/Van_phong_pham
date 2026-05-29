@@ -36,12 +36,9 @@ function mapOrder(row) {
 /**
  * Tạo đơn hàng mới từ giỏ hàng hiện tại của người dùng.
  *
- * Luồng:
- *  1. Lấy cart_items (join products) của user.
- *  2. Validate: giỏ hàng không rỗng, tất cả sản phẩm đang active & đủ tồn kho.
- *  3. INSERT orders row.
- *  4. INSERT order_items rows (trigger DB sẽ tự giảm tồn kho).
- *  5. Xoá cart của user sau khi đặt hàng thành công.
+ * Toàn bộ luồng (validate → INSERT orders → INSERT order_items → DELETE cart_items)
+ * được thực thi bên trong một PostgreSQL transaction duy nhất thông qua hàm
+ * `create_order_transaction` — đảm bảo tính nguyên tử hoàn toàn.
  *
  * @param {string} userId                  - UUID người dùng (từ req.user.id)
  * @param {object} payload
@@ -59,120 +56,50 @@ export async function createOrder(userId, { address, paymentMethod = 'cod', note
     throw new AppError('Phương thức thanh toán không hợp lệ. Chỉ chấp nhận: cod, transfer.', 400);
   }
 
-  // ── 1. Lấy giỏ hàng hiện tại ─────────────────────────────────────────────
-  const { data: cartItems, error: cartError } = await supabaseAdmin
-    .from('cart_items')
-    .select(`
-      id,
-      quantity,
-      products (
-        id,
-        name,
-        price,
-        stock,
-        is_active
-      )
-    `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+  // ── Gọi hàm DB atomic: validate + INSERT orders + INSERT order_items + DELETE cart ──
+  const { data: orderId, error: rpcError } = await supabaseAdmin
+    .rpc('create_order_transaction', {
+      p_user_id:        userId,
+      p_address:        address.trim(),
+      p_payment_method: paymentMethod,
+      p_note:           note?.trim() || null,
+    });
 
-  if (cartError) {
-    console.error('[order.service] Lỗi lấy giỏ hàng:', cartError.message);
-    throw new AppError('Không thể lấy thông tin giỏ hàng.', 500);
-  }
+  if (rpcError) {
+    console.error('[order.service] Lỗi tạo đơn hàng (RPC):', rpcError.message);
 
-  // ── 2. Validate ───────────────────────────────────────────────────────────
-  if (!cartItems || cartItems.length === 0) {
-    throw new AppError('Giỏ hàng trống. Vui lòng thêm sản phẩm trước khi đặt hàng.', 400);
-  }
+    // Bắt các lỗi nghiệp vụ từ hàm PL/pgSQL
+    if (rpcError.code === 'P0001') throw new AppError(rpcError.message, 400); // Giỏ hàng trống
+    if (rpcError.code === 'P0002') throw new AppError(rpcError.message, 400); // Sản phẩm ngừng KD
+    if (rpcError.code === 'P0003') throw new AppError(rpcError.message, 400); // Vượt tồn kho
 
-  const validItems = cartItems.filter((ci) => ci.products);
-  if (validItems.length === 0) {
-    throw new AppError('Không có sản phẩm hợp lệ trong giỏ hàng.', 400);
-  }
-
-  for (const ci of validItems) {
-    const p = ci.products;
-    if (!p.is_active) {
-      throw new AppError(`Sản phẩm "${p.name}" đã ngừng kinh doanh.`, 400);
-    }
-    if (ci.quantity > p.stock) {
-      throw new AppError(
-        `Sản phẩm "${p.name}" không đủ tồn kho. Hiện còn ${p.stock} sản phẩm.`,
-        400
-      );
-    }
-  }
-
-  // ── 3. Tính tổng tiền ─────────────────────────────────────────────────────
-  const total = validItems.reduce(
-    (sum, ci) => sum + Number(ci.products.price) * ci.quantity,
-    0
-  );
-
-  // ── 4. INSERT order ───────────────────────────────────────────────────────
-  const { data: order, error: orderError } = await supabaseAdmin
-    .from('orders')
-    .insert({
-      user_id: userId,
-      status: 'pending',
-      total,
-      address: address.trim(),
-      payment_method: paymentMethod,
-      note: note?.trim() || null,
-    })
-    .select('id, status, total, address, payment_method, note, created_at, updated_at')
-    .single();
-
-  if (orderError) {
-    console.error('[order.service] Lỗi tạo đơn hàng:', orderError.message);
     throw new AppError('Không thể tạo đơn hàng. Vui lòng thử lại.', 500);
   }
 
-  // ── 5. INSERT order_items (trigger sẽ tự giảm tồn kho) ───────────────────
-  const orderItemsPayload = validItems.map((ci) => ({
-    order_id: order.id,
-    product_id: ci.products.id,
-    product_name: ci.products.name,
-    quantity: ci.quantity,
-    unit_price: ci.products.price,
-  }));
-
-  const { data: insertedItems, error: itemsError } = await supabaseAdmin
-    .from('order_items')
-    .insert(orderItemsPayload)
-    .select('id, product_id, product_name, quantity, unit_price');
-
-  if (itemsError) {
-    console.error('[order.service] Lỗi tạo order_items:', itemsError.message);
-    // Rollback: xoá order vừa tạo để tránh đơn hàng rỗng
-    await supabaseAdmin.from('orders').delete().eq('id', order.id);
-    throw new AppError('Không thể tạo chi tiết đơn hàng. Vui lòng thử lại.', 500);
+  if (!orderId) {
+    throw new AppError('Không thể tạo đơn hàng. Vui lòng thử lại.', 500);
   }
 
-  // ── 6. Xoá giỏ hàng sau khi đặt hàng thành công ──────────────────────────
-  const { error: clearError } = await supabaseAdmin
-    .from('cart_items')
-    .delete()
-    .eq('user_id', userId);
+  // ── Lấy đơn hàng vừa tạo kèm items để trả về client ──────────────────────
+  const { data: order, error: fetchError } = await supabaseAdmin
+    .from('orders')
+    .select(`
+      id, status, total, address, payment_method, note, created_at, updated_at,
+      order_items (
+        id, product_id, product_name, quantity, unit_price
+      )
+    `)
+    .eq('id', orderId)
+    .single();
 
-  if (clearError) {
-    // Không ném lỗi — đơn hàng đã tạo thành công, chỉ log cảnh báo
-    console.warn('[order.service] Cảnh báo: không thể xoá giỏ hàng sau khi đặt hàng:', clearError.message);
+  if (fetchError || !order) {
+    console.error('[order.service] Đơn hàng đã tạo nhưng không thể tải lại:', fetchError?.message);
+    throw new AppError('Đơn hàng đã được tạo nhưng không thể tải thông tin. Vui lòng kiểm tra lịch sử đơn hàng.', 500);
   }
 
-  return {
-    id: order.id,
-    status: order.status,
-    total: Number(order.total),
-    address: order.address,
-    paymentMethod: order.payment_method,
-    note: order.note || '',
-    createdAt: order.created_at,
-    updatedAt: order.updated_at,
-    items: insertedItems.map(mapOrderItem),
-  };
+  return mapOrder(order);
 }
+
 
 /**
  * Lấy danh sách đơn hàng của người dùng hiện tại (phân trang).
