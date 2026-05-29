@@ -160,7 +160,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Thêm sản phẩm vào giỏ.
    */
   const addItem = async (product: Product, quantity = 1) => {
-    const oldItem = items.find(item => item.product.id === product.id);
+    const oldItem = itemsRef.current.find(item => item.product.id === product.id);
     const oldQuantity = oldItem ? oldItem.quantity : 0;
 
     // Optimistically update local UI immediately
@@ -211,11 +211,10 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá một sản phẩm khỏi giỏ.
    */
   const removeItem = async (productId: string) => {
-    const oldItem = items.find(item => item.product.id === productId);
-    const optimisticItems = items.filter(item => item.product.id !== productId);
+    const oldItem = itemsRef.current.find(item => item.product.id === productId);
 
-    // Optimistically update local UI immediately
-    setItems(optimisticItems);
+    // Optimistically update local UI immediately using functional state update
+    setItems(prev => prev.filter(item => item.product.id !== productId));
 
     if (user) {
       setIsLoading(true);
@@ -320,7 +319,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá toàn bộ giỏ hàng.
    */
   const clearCart = async () => {
-    const previousItems = [...items];
+    const previousItems = [...itemsRef.current];
 
     // Optimistically update local UI immediately
     setItems([]);
