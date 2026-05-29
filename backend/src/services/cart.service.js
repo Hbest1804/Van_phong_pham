@@ -99,66 +99,31 @@ export async function addToCart(userId, productId, quantity = 1) {
     throw new AppError('Số lượng phải là số nguyên lớn hơn 0.', 400);
   }
 
-  // ── 1 & 2. Kiểm tra sản phẩm và giỏ hàng đồng thời (Single Roundtrip) ───
-  const [productRes, existingRes] = await Promise.all([
-    supabaseAdmin
-      .from('products')
-      .select('id, name, stock, is_active')
-      .eq('id', productId)
-      .maybeSingle(),
-    supabaseAdmin
-      .from('cart_items')
-      .select('id, quantity')
-      .eq('user_id', userId)
-      .eq('product_id', productId)
-      .maybeSingle()
-  ]);
-
-  const { data: product, error: productError } = productRes;
-  const { data: existing, error: findError } = existingRes;
-
-  if (productError) {
-    console.error('[cart.service] Lỗi kiểm tra sản phẩm:', productError.message);
-    throw new AppError('Không thể kiểm tra sản phẩm. Vui lòng thử lại.', 500);
-  }
-  if (!product) {
-    throw new AppError('Sản phẩm không tồn tại.', 404);
-  }
-  if (!product.is_active) {
-    throw new AppError('Sản phẩm đã ngừng kinh doanh.', 400);
-  }
-
-  if (findError) {
-    console.error('[cart.service] Lỗi kiểm tra giỏ hàng:', findError.message);
-    throw new AppError('Không thể kiểm tra giỏ hàng. Vui lòng thử lại.', 500);
-  }
-
-  const newQuantity = existing ? existing.quantity + qty : qty;
-
-  // ── 3. Validate tồn kho ──────────────────────────────────────────────────
-  if (newQuantity > product.stock) {
-    throw new AppError(
-      `Số lượng vượt quá tồn kho. Hiện còn ${product.stock} sản phẩm.`,
-      400
-    );
-  }
-
-  // ── 4. Upsert vào cart_items ─────────────────────────────────────────────
-  const { data: cartItem, error: upsertError } = await supabaseAdmin
-    .from('cart_items')
-    .upsert(
-      {
-        user_id: userId,
-        product_id: productId,
-        quantity: newQuantity,
-      },
-      { onConflict: 'user_id,product_id' }
-    )
-    .select('id, quantity, product_id')
+  // Gọi database function qua RPC để thêm/cập nhật giỏ hàng atomically, tránh race condition
+  const { data: cartItem, error: rpcError } = await supabaseAdmin
+    .rpc('add_to_cart_atomic', {
+      p_user_id: userId,
+      p_product_id: productId,
+      p_quantity: qty
+    })
     .single();
 
-  if (upsertError) {
-    console.error('[cart.service] Lỗi thêm vào giỏ:', upsertError.message);
+  if (rpcError) {
+    console.error('[cart.service] Lỗi thêm vào giỏ atomic:', rpcError.message);
+    
+    if (rpcError.message.includes('Sản phẩm không tồn tại.')) {
+      throw new AppError('Sản phẩm không tồn tại.', 404);
+    }
+    if (rpcError.message.includes('Sản phẩm đã ngừng kinh doanh.')) {
+      throw new AppError('Sản phẩm đã ngừng kinh doanh.', 400);
+    }
+    if (rpcError.message.includes('Số lượng vượt quá tồn kho')) {
+      throw new AppError(rpcError.message, 400);
+    }
+    throw new AppError('Không thể thêm sản phẩm vào giỏ hàng.', 500);
+  }
+
+  if (!cartItem) {
     throw new AppError('Không thể thêm sản phẩm vào giỏ hàng.', 500);
   }
 
@@ -166,7 +131,7 @@ export async function addToCart(userId, productId, quantity = 1) {
     cartItemId: cartItem.id,
     productId: cartItem.product_id,
     quantity: cartItem.quantity,
-    message: existing ? 'Đã cập nhật số lượng trong giỏ hàng.' : 'Đã thêm sản phẩm vào giỏ hàng.',
+    message: cartItem.message,
   };
 }
 

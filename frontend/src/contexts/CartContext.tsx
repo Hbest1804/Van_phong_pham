@@ -15,7 +15,7 @@ interface CartContextType {
   total: number;
   itemCount: number;
   isLoading: boolean;
-  syncWithServer: (failedItems?: CartItem[]) => Promise<CartItemIdMap | null>;
+  syncWithServer: (failedItems?: CartItem[], currentItems?: CartItem[]) => Promise<CartItemIdMap | null>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -54,11 +54,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Đồng bộ giỏ hàng từ server.
    */
-  const syncWithServer = async (failedItems?: CartItem[]): Promise<CartItemIdMap | null> => {
+  const syncWithServer = async (failedItems?: CartItem[], currentItems?: CartItem[]): Promise<CartItemIdMap | null> => {
     if (!user) return null;
 
     // Lấy các sản phẩm chưa đồng bộ (không có trong cartItemIds) làm fallback nếu không truyền failedItems
-    const itemsToMerge = failedItems || itemsRef.current.filter(item => !cartItemIds[item.product.id]);
+    const itemsToMerge = failedItems || (currentItems || itemsRef.current).filter(item => !cartItemIds[item.product.id]);
 
     setIsLoading(true);
     try {
@@ -229,15 +229,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const removeItem = async (productId: string) => {
     const oldItem = items.find(item => item.product.id === productId);
     const previousIds = { ...cartItemIds };
+    const optimisticItems = items.filter(item => item.product.id !== productId);
 
     // Optimistically update local UI immediately
-    setItems(prev => prev.filter(item => item.product.id !== productId));
+    setItems(optimisticItems);
 
     if (user) {
       let cartItemId = cartItemIds[productId];
       if (!cartItemId) {
         // Đồng bộ lại nếu thiếu mapping
-        const freshIdMap = await syncWithServer();
+        const freshIdMap = await syncWithServer(undefined, optimisticItems);
         if (freshIdMap) {
           cartItemId = freshIdMap[productId];
           // Re-apply optimistic update since syncWithServer overwrote it
@@ -299,18 +300,17 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     const oldQuantity = oldItem ? oldItem.quantity : null;
     const previousIds = { ...cartItemIds };
 
-    // Optimistically update local UI immediately
-    setItems(prev =>
-      prev.map(item =>
-        item.product.id === productId ? { ...item, quantity } : item
-      )
+    const optimisticItems = items.map(item =>
+      item.product.id === productId ? { ...item, quantity } : item
     );
+    // Optimistically update local UI immediately
+    setItems(optimisticItems);
 
     if (user) {
       let cartItemId = cartItemIds[productId];
       if (!cartItemId) {
         // Đồng bộ lại nếu thiếu mapping
-        const freshIdMap = await syncWithServer();
+        const freshIdMap = await syncWithServer(undefined, optimisticItems);
         if (freshIdMap) {
           cartItemId = freshIdMap[productId];
           // Re-apply optimistic update since syncWithServer overwrote it

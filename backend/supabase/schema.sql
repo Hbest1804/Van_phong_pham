@@ -371,3 +371,81 @@ INSERT INTO users (email, password_hash, name, role, status) VALUES
     'active'
   )
 ON CONFLICT (email) DO NOTHING;
+
+
+-- ============================================================
+-- 15. HÀM DATABASE: add_to_cart_atomic
+--     Thêm sản phẩm vào giỏ hàng một cách atomic để tránh race condition mất cập nhật số lượng.
+--     Kiểm tra tồn kho và trạng thái hoạt động của sản phẩm ngay trong database.
+-- ============================================================
+CREATE OR REPLACE FUNCTION add_to_cart_atomic(
+  p_user_id UUID,
+  p_product_id UUID,
+  p_quantity INT
+)
+RETURNS TABLE (
+  id UUID,
+  product_id UUID,
+  quantity INT,
+  message TEXT
+) AS $$
+DECLARE
+  v_stock INT;
+  v_is_active BOOLEAN;
+  v_cart_item_id UUID;
+  v_existing_quantity INT;
+  v_new_quantity INT;
+  v_message TEXT;
+BEGIN
+  -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
+  SELECT stock, is_active INTO v_stock, v_is_active
+  FROM products
+  WHERE products.id = p_product_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Sản phẩm không tồn tại.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF NOT v_is_active THEN
+    RAISE EXCEPTION 'Sản phẩm đã ngừng kinh doanh.' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 2. Lấy số lượng hiện tại trong giỏ hàng (nếu có)
+  SELECT cart_items.quantity INTO v_existing_quantity
+  FROM cart_items
+  WHERE user_id = p_user_id AND cart_items.product_id = p_product_id;
+
+  IF FOUND THEN
+    v_new_quantity := v_existing_quantity + p_quantity;
+  ELSE
+    v_new_quantity := p_quantity;
+  END IF;
+
+  -- 3. Kiểm tra số lượng mới so với tồn kho
+  IF v_new_quantity > v_stock THEN
+    RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
+  END IF;
+
+  -- 4. Thực hiện insert hoặc update atomically
+  INSERT INTO cart_items (user_id, cart_items.product_id, cart_items.quantity)
+  VALUES (p_user_id, p_product_id, p_quantity)
+  ON CONFLICT (user_id, cart_items.product_id)
+  DO UPDATE SET 
+    quantity = cart_items.quantity + EXCLUDED.quantity,
+    updated_at = NOW()
+  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity INTO v_cart_item_id, product_id, quantity;
+
+  -- Xác định message phản hồi
+  IF v_existing_quantity IS NOT NULL THEN
+    v_message := 'Đã cập nhật số lượng trong giỏ hàng.';
+  ELSE
+    v_message := 'Đã thêm sản phẩm vào giỏ hàng.';
+  END IF;
+
+  id := v_cart_item_id;
+  message := v_message;
+  
+  RETURN NEXT;
+END;
+$$ LANGUAGE plpgsql;
