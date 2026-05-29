@@ -22,6 +22,11 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
+  const currentUserRef = useRef(user);
+  useEffect(() => {
+    currentUserRef.current = user;
+  }, [user]);
+
   const [items, setItems] = useState<CartItem[]>(() => {
     const stored = localStorage.getItem('cart_items');
     return stored ? JSON.parse(stored) : [];
@@ -56,6 +61,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    */
   const syncWithServer = async (failedItems?: CartItem[], currentItems?: CartItem[]): Promise<CartItemIdMap | null> => {
     if (!user) return null;
+    const syncUserId = user.id;
 
     // Lấy các sản phẩm chưa đồng bộ (không có trong cartItemIds) làm fallback nếu không truyền failedItems
     const itemsToMerge = failedItems || (currentItems || itemsRef.current).filter(item => !cartItemIds[item.product.id]);
@@ -63,6 +69,12 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoading(true);
     try {
       const res = await cartApi.getCart();
+
+      // Kiểm tra xem user có bị thay đổi trong quá trình gọi API hay không
+      if (currentUserRef.current?.id !== syncUserId) {
+        return null;
+      }
+
       if (res.success && res.data) {
         const serverItems: CartItem[] = res.data.items.map(item => ({
           product: item.product,
@@ -90,7 +102,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (err) {
       console.error('[CartContext] Không thể đồng bộ giỏ hàng:', err);
     } finally {
-      setIsLoading(false);
+      if (currentUserRef.current?.id === syncUserId) {
+        setIsLoading(false);
+      }
     }
     return null;
   };

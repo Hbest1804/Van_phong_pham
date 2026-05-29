@@ -200,6 +200,7 @@ export async function updateCartItem(userId, cartItemId, quantity) {
     .from('cart_items')
     .update({ quantity: qty })
     .eq('id', cartItemId)
+    .eq('user_id', userId)
     .select('id, quantity, product_id')
     .single();
 

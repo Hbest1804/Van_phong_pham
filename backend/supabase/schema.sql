@@ -394,7 +394,6 @@ DECLARE
   v_is_active BOOLEAN;
   v_cart_item_id UUID;
   v_existing_quantity INT;
-  v_new_quantity INT;
   v_message TEXT;
 BEGIN
   -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
@@ -416,18 +415,7 @@ BEGIN
   FROM cart_items
   WHERE user_id = p_user_id AND cart_items.product_id = p_product_id;
 
-  IF FOUND THEN
-    v_new_quantity := v_existing_quantity + p_quantity;
-  ELSE
-    v_new_quantity := p_quantity;
-  END IF;
-
-  -- 3. Kiểm tra số lượng mới so với tồn kho
-  IF v_new_quantity > v_stock THEN
-    RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
-  END IF;
-
-  -- 4. Thực hiện insert hoặc update atomically
+  -- 3. Thực hiện insert hoặc update atomically
   INSERT INTO cart_items (user_id, product_id, quantity)
   VALUES (p_user_id, p_product_id, p_quantity)
   ON CONFLICT (user_id, product_id)
@@ -435,6 +423,11 @@ BEGIN
     quantity = cart_items.quantity + EXCLUDED.quantity,
     updated_at = NOW()
   RETURNING cart_items.id, cart_items.product_id, cart_items.quantity INTO v_cart_item_id, product_id, quantity;
+
+  -- 4. Kiểm tra số lượng sau khi cập nhật để tránh race condition vượt quá tồn kho
+  IF quantity > v_stock THEN
+    RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
+  END IF;
 
   -- Xác định message phản hồi
   IF v_existing_quantity IS NOT NULL THEN
