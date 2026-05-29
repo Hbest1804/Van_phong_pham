@@ -168,6 +168,43 @@ export async function addToCart(userId, productId, quantity = 1) {
   }
 
   if (upsertError) {
+    if (upsertError.code === '23505') {
+      // Race condition recovery: another concurrent insert succeeded.
+      // Re-fetch the item and update it instead.
+      const { data: retryExisting, error: retryFindError } = await supabaseAdmin
+        .from('cart_items')
+        .select('id, quantity')
+        .eq('user_id', userId)
+        .eq('product_id', productId)
+        .maybeSingle();
+
+      if (!retryFindError && retryExisting) {
+        const retryNewQty = retryExisting.quantity + qty;
+        if (retryNewQty <= product.stock) {
+          const { data: retryUpdate, error: retryUpdateError } = await supabaseAdmin
+            .from('cart_items')
+            .update({ quantity: retryNewQty })
+            .eq('id', retryExisting.id)
+            .select('id, quantity, product_id')
+            .single();
+
+          if (!retryUpdateError && retryUpdate) {
+            return {
+              cartItemId: retryUpdate.id,
+              productId: retryUpdate.product_id,
+              quantity: retryUpdate.quantity,
+              message: 'Đã cập nhật số lượng trong giỏ hàng.',
+            };
+          }
+        } else {
+          throw new AppError(
+            `Số lượng vượt quá tồn kho. Hiện còn ${product.stock} sản phẩm.`,
+            400
+          );
+        }
+      }
+    }
+
     console.error('[cart.service] Lỗi thêm vào giỏ:', upsertError.message);
     throw new AppError('Không thể thêm sản phẩm vào giỏ hàng.', 500);
   }

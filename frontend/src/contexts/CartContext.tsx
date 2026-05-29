@@ -99,12 +99,10 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         if (localItems.length > 0) {
           setIsLoading(true);
           try {
-            // Đẩy tất cả local items lên server
-            await Promise.all(
-              localItems.map(item =>
-                cartApi.addToCart(item.product.id, item.quantity)
-              )
-            );
+            // Đẩy tất cả local items lên server tuần tự để tránh nghẽn/rate-limiting/race condition
+            for (const item of localItems) {
+              await cartApi.addToCart(item.product.id, item.quantity);
+            }
           } catch (err) {
             console.error('[CartContext] Lỗi đồng bộ giỏ hàng vô danh lên server:', err);
           }
@@ -182,7 +180,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       if (cartItemId) {
         setIsLoading(true);
         try {
-          await cartApi.removeFromCart(cartItemId);
+          const res = await cartApi.removeFromCart(cartItemId);
+          if (res && !res.success) {
+            console.error('[CartContext] Lỗi xoá sản phẩm:', res.message);
+            return;
+          }
           setCartItemIds(prev => {
             const next = { ...prev };
             delete next[productId];
@@ -190,11 +192,13 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           });
         } catch (err) {
           console.error('[CartContext] Lỗi xoá sản phẩm:', err);
+          return;
         } finally {
           setIsLoading(false);
         }
       } else {
         console.warn(`[CartContext] Không tìm thấy cartItemId cho sản phẩm ${productId} trên server.`);
+        return;
       }
     }
     setItems(prev => prev.filter(item => item.product.id !== productId));
@@ -222,7 +226,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       if (cartItemId) {
         setIsLoading(true);
         try {
-          await cartApi.updateCartItem(cartItemId, quantity);
+          const res = await cartApi.updateCartItem(cartItemId, quantity);
+          if (!res.success) {
+            console.error('[CartContext] Lỗi cập nhật số lượng:', res.message);
+            return;
+          }
         } catch (err) {
           console.error('[CartContext] Lỗi cập nhật số lượng:', err);
           return; // Không cập nhật local nếu server lỗi
@@ -236,6 +244,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           const res = await cartApi.addToCart(productId, quantity);
           if (res.success && res.data) {
             setCartItemIds(prev => ({ ...prev, [productId]: res.data!.cartItemId }));
+          } else {
+            console.error('[CartContext] Lỗi tự động thêm vào giỏ:', res.message);
+            return;
           }
         } catch (err) {
           console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
@@ -260,10 +271,15 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     if (user) {
       setIsLoading(true);
       try {
-        await cartApi.clearCart();
+        const res = await cartApi.clearCart();
+        if (res && !res.success) {
+          console.error('[CartContext] Lỗi xoá giỏ hàng:', res.message);
+          return;
+        }
         setCartItemIds({});
       } catch (err) {
         console.error('[CartContext] Lỗi xoá giỏ hàng:', err);
+        return;
       } finally {
         setIsLoading(false);
       }
