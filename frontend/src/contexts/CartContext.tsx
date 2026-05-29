@@ -132,35 +132,51 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
 
-      // Đăng nhập (Guest -> Member)
-      if (user && !prevUser) {
-        const localItems = [...itemsRef.current];
-        if (localItems.length > 0) {
-          setIsLoading(true);
+      if (user?.id !== prevUser?.id) {
+        // Đăng nhập (Guest -> Member)
+        if (user && !prevUser) {
+          const guestCartStored = localStorage.getItem('cart_items');
+          let guestItems: CartItem[] = [];
           try {
-            const payload = localItems.map(item => ({
-              productId: item.product.id,
-              quantity: item.quantity,
-            }));
-            const res = await cartApi.bulkSyncCart(payload);
-            if (!res.success) {
-              console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', res.message);
-              alert('Không thể đồng bộ giỏ hàng của bạn lên máy chủ.');
-            }
+            guestItems = guestCartStored ? JSON.parse(guestCartStored) : [];
           } catch (err) {
-            console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', err);
-            alert('Có lỗi xảy ra khi đồng bộ giỏ hàng.');
+            console.error('[CartContext] Lỗi parse giỏ hàng guest:', err);
+          }
+
+          if (guestItems.length > 0) {
+            setIsLoading(true);
+            try {
+              const payload = guestItems.map(item => ({
+                productId: item.product.id,
+                quantity: item.quantity,
+              }));
+              const res = await cartApi.bulkSyncCart(payload);
+              if (!res.success) {
+                console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', res.message);
+                alert('Không thể đồng bộ giỏ hàng của bạn lên máy chủ.');
+              }
+            } catch (err) {
+              console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', err);
+              alert('Có lỗi xảy ra khi đồng bộ giỏ hàng.');
+            }
+          }
+          if (active) {
+            await syncWithServer();
           }
         }
-        if (active) {
-          await syncWithServer();
+        // Chuyển đổi tài khoản trực tiếp (Member A -> Member B)
+        else if (user && prevUser) {
+          if (active) {
+            setItems([]);
+            await syncWithServer();
+          }
         }
-      }
-      // Đăng xuất (Member -> Guest)
-      else if (!user && prevUser) {
-        if (active) {
-          setItems([]);
-          localStorage.removeItem(`cart_items_${prevUser.id}`);
+        // Đăng xuất (Member -> Guest)
+        else if (!user && prevUser) {
+          if (active) {
+            setItems([]);
+            localStorage.removeItem('cart_items_' + prevUser.id);
+          }
         }
       }
     };

@@ -63,8 +63,8 @@ export async function getCart(userId) {
     throw new AppError('Không thể tải giỏ hàng. Vui lòng thử lại.', 500);
   }
 
-  // Lọc bỏ các item mà sản phẩm không còn tồn tại hoặc đã bị ẩn
-  const validItems = (data || []).filter(row => row.products && row.products.is_active);
+  // Giữ lại các item mà sản phẩm tồn tại trong hệ thống (kể cả đã ngừng kinh doanh)
+  const validItems = (data || []).filter(row => row.products);
 
   const items = validItems.map(mapCartItem);
 
@@ -118,13 +118,13 @@ export async function addToCart(userId, productId, quantity = 1) {
   if (rpcError) {
     console.error('[cart.service] Lỗi thêm vào giỏ atomic:', rpcError.message);
     
-    if (rpcError.message.includes('Sản phẩm không tồn tại.')) {
+    if (rpcError.code === 'P0002') {
       throw new AppError('Sản phẩm không tồn tại.', 404);
     }
-    if (rpcError.message.includes('Sản phẩm đã ngừng kinh doanh.')) {
+    if (rpcError.code === 'P0001') {
       throw new AppError('Sản phẩm đã ngừng kinh doanh.', 400);
     }
-    if (rpcError.message.includes('Số lượng vượt quá tồn kho')) {
+    if (rpcError.code === 'P0003') {
       throw new AppError(rpcError.message, 400);
     }
     throw new AppError('Không thể thêm sản phẩm vào giỏ hàng.', 500);
