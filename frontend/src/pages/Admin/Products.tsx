@@ -7,10 +7,13 @@ import { productsApi } from '../../lib/api';
 import { Plus, Edit2, Trash2, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { Product } from '../../types';
 
-type FormData = Omit<Product, 'id'>;
+type FormData = Omit<Product, 'id' | 'price' | 'stock'> & {
+  price: number | '';
+  stock: number | '';
+};
 
 const emptyForm: FormData = {
-  name: '', description: '', price: 0, stock: 0, categoryId: '', image: '',
+  name: '', description: '', price: '', stock: '', categoryId: '', image: '',
 };
 
 export function Products() {
@@ -97,8 +100,8 @@ export function Products() {
         res = await productsApi.updateProduct(isEditing, {
           name: formData.name,
           description: formData.description,
-          price: formData.price,
-          stock: formData.stock,
+          price: formData.price === '' ? 0 : Number(formData.price),
+          stock: formData.stock === '' ? 0 : Number(formData.stock),
           categoryId: formData.categoryId,
           imageUrl: formData.image,
         });
@@ -107,8 +110,8 @@ export function Products() {
         res = await productsApi.createProduct({
           name: formData.name,
           description: formData.description,
-          price: formData.price,
-          stock: formData.stock,
+          price: formData.price === '' ? 0 : Number(formData.price),
+          stock: formData.stock === '' ? 0 : Number(formData.stock),
           categoryId: formData.categoryId,
           imageUrl: formData.image,
         });
@@ -174,11 +177,27 @@ export function Products() {
             </div>
             <div>
               <label className="text-sm font-medium">Giá (VND)</label>
-              <Input type="number" min={0} value={formData.price} onChange={e => setFormData({ ...formData, price: Number(e.target.value) })} />
+              <Input
+                type="number"
+                min={0}
+                value={formData.price}
+                onChange={e => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, price: val === '' ? '' : Number(val) });
+                }}
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Tồn kho</label>
-              <Input type="number" min={0} value={formData.stock} onChange={e => setFormData({ ...formData, stock: Number(e.target.value) })} />
+              <Input
+                type="number"
+                min={0}
+                value={formData.stock}
+                onChange={e => {
+                  const val = e.target.value;
+                  setFormData({ ...formData, stock: val === '' ? '' : Number(val) });
+                }}
+              />
             </div>
             <div className="col-span-2">
               <label className="block text-sm font-medium mb-1">Hình ảnh sản phẩm</label>

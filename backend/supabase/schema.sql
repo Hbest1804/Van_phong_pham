@@ -199,7 +199,32 @@ CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id
 
 
 -- ============================================================
--- 8. TRIGGER: tự động cập nhật cột updated_at
+-- 8. BẢNG: cart_items
+--    Giỏ hàng phía server — mỗi row là 1 sản phẩm trong giỏ của 1 user.
+--    UNIQUE (user_id, product_id) đảm bảo không trùng sản phẩm.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS cart_items (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES users    (id) ON DELETE CASCADE,
+  product_id  UUID        NOT NULL REFERENCES products (id) ON DELETE CASCADE,
+  quantity    INTEGER     NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, product_id)   -- mỗi sản phẩm chỉ xuất hiện 1 lần trong giỏ
+);
+
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE  cart_items          IS 'Giỏ hàng phía server — mỗi row là 1 sản phẩm trong giỏ của 1 user';
+COMMENT ON COLUMN cart_items.quantity IS 'Số lượng sản phẩm, phải > 0';
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_cart_items_user_id    ON cart_items (user_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_product_id ON cart_items (product_id);
+
+
+-- ============================================================
+-- 9. TRIGGER: tự động cập nhật cột updated_at
 -- ============================================================
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -214,7 +239,7 @@ DO $$
 DECLARE
   t TEXT;
 BEGIN
-  FOREACH t IN ARRAY ARRAY['users','categories','products','orders'] LOOP
+  FOREACH t IN ARRAY ARRAY['users','categories','products','orders','cart_items'] LOOP
     EXECUTE format('
       DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I;
       CREATE TRIGGER trg_%s_updated_at
@@ -226,7 +251,7 @@ END $$;
 
 
 -- ============================================================
--- 9. TRIGGER: giảm tồn kho khi tạo order_item mới
+-- 10. TRIGGER: giảm tồn kho khi tạo order_item mới
 -- ============================================================
 CREATE OR REPLACE FUNCTION decrease_product_stock()
 RETURNS TRIGGER AS $$
@@ -246,7 +271,7 @@ CREATE OR REPLACE TRIGGER trg_order_items_decrease_stock
 
 
 -- ============================================================
--- 10. TRIGGER: quản lý kho khi trạng thái đơn hàng thay đổi
+-- 11. TRIGGER: quản lý kho khi trạng thái đơn hàng thay đổi
 --     a) Hoàn kho khi chuyển → cancelled
 --     b) Enforce: cancelled là trạng thái cuối (terminal state)
 -- ============================================================
@@ -279,7 +304,7 @@ CREATE OR REPLACE TRIGGER trg_orders_manage_stock
 
 
 -- ============================================================
--- 11. TRIGGER: hoàn kho khi đơn hàng bị xoá cứng (hard delete)
+-- 12. TRIGGER: hoàn kho khi đơn hàng bị xoá cứng (hard delete)
 --     ON DELETE CASCADE xoá order_items trước khi trigger này chạy,
 --     nên ta xử lý ở BEFORE DELETE để đọc được items.
 -- ============================================================
@@ -305,7 +330,7 @@ CREATE OR REPLACE TRIGGER trg_orders_restore_stock_on_delete
 
 
 -- ============================================================
--- 11. ROW LEVEL SECURITY (RLS) — Tuỳ chọn nếu dùng Supabase Auth
+-- 13. ROW LEVEL SECURITY (RLS) — Tuỳ chọn nếu dùng Supabase Auth
 --     Bỏ qua nếu backend tự xử lý auth bằng service_role key
 -- ============================================================
 
@@ -322,7 +347,7 @@ CREATE OR REPLACE TRIGGER trg_orders_restore_stock_on_delete
 
 
 -- ============================================================
--- 12. DỮ LIỆU MẪU (Seed Data)
+-- 14. DỮ LIỆU MẪU (Seed Data)
 -- ============================================================
 
 -- ---- Danh mục ----
@@ -348,3 +373,107 @@ INSERT INTO users (email, password_hash, name, role, status) VALUES
     'active'
   )
 ON CONFLICT (email) DO NOTHING;
+
+
+-- ============================================================
+-- 15. HÀM DATABASE: add_to_cart_atomic
+--     Thêm sản phẩm vào giỏ hàng một cách atomic để tránh race condition mất cập nhật số lượng.
+--     Kiểm tra tồn kho và trạng thái hoạt động của sản phẩm ngay trong database.
+-- ============================================================
+CREATE OR REPLACE FUNCTION add_to_cart_atomic(
+  p_user_id UUID,
+  p_product_id UUID,
+  p_quantity INT
+)
+RETURNS TABLE (
+  id UUID,
+  product_id UUID,
+  quantity INT,
+  message TEXT
+) AS $$
+#variable_conflict use_column
+DECLARE
+  v_stock INT;
+  v_is_active BOOLEAN;
+  v_cart_item_id UUID;
+  v_existing_quantity INT;
+  v_message TEXT;
+BEGIN
+  -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
+  SELECT stock, is_active INTO v_stock, v_is_active
+  FROM products
+  WHERE products.id = p_product_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Sản phẩm không tồn tại.' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF NOT v_is_active THEN
+    RAISE EXCEPTION 'Sản phẩm đã ngừng kinh doanh.' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 2. Lấy số lượng hiện tại trong giỏ hàng (nếu có)
+  SELECT cart_items.quantity INTO v_existing_quantity
+  FROM cart_items
+  WHERE user_id = p_user_id AND cart_items.product_id = p_product_id;
+
+  -- 3. Thực hiện insert hoặc update atomically
+  INSERT INTO cart_items (user_id, product_id, quantity)
+  VALUES (p_user_id, p_product_id, p_quantity)
+  ON CONFLICT (user_id, product_id)
+  DO UPDATE SET 
+    quantity = cart_items.quantity + EXCLUDED.quantity,
+    updated_at = NOW()
+  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity INTO v_cart_item_id, product_id, quantity;
+
+  -- 4. Kiểm tra số lượng sau khi cập nhật để tránh race condition vượt quá tồn kho
+  IF quantity > v_stock THEN
+    RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
+  END IF;
+
+  -- Xác định message phản hồi
+  IF v_existing_quantity IS NOT NULL THEN
+    v_message := 'Đã cập nhật số lượng trong giỏ hàng.';
+  ELSE
+    v_message := 'Đã thêm sản phẩm vào giỏ hàng.';
+  END IF;
+
+  id := v_cart_item_id;
+  message := v_message;
+  
+  RETURN NEXT;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 16. HÀM DATABASE: sync_cart_bulk
+--     Đồng bộ giỏ hàng của người dùng từ giỏ hàng guest (JSONB) lên server atomically.
+--     Kiểm tra tồn kho và trạng thái hoạt động của sản phẩm ngay trong database.
+-- ============================================================
+CREATE OR REPLACE FUNCTION sync_cart_bulk(
+  p_user_id UUID,
+  p_items JSONB
+)
+RETURNS VOID AS $$
+#variable_conflict use_column
+BEGIN
+  -- Thêm/Cập nhật các mặt hàng từ JSONB
+  INSERT INTO cart_items (user_id, product_id, quantity)
+  SELECT 
+    p_user_id, 
+    (item->>'productId')::UUID, 
+    LEAST(SUM((item->>'quantity')::INT)::INT, p.stock)
+  FROM jsonb_array_elements(p_items) AS item
+  JOIN products p ON p.id = (item->>'productId')::UUID
+  WHERE p.is_active = TRUE AND p.stock > 0
+  GROUP BY (item->>'productId')::UUID, p.stock
+  ON CONFLICT (user_id, product_id)
+  DO UPDATE SET 
+    quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (
+      SELECT stock FROM products WHERE id = EXCLUDED.product_id
+    )),
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
