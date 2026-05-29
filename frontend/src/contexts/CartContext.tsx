@@ -33,6 +33,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   });
   // Map productId → cartItemId (UUID server) để gọi PUT/DELETE
   const [cartItemIds, setCartItemIds] = useState<CartItemIdMap>({});
+  const cartItemIdsRef = useRef(cartItemIds);
+  useEffect(() => {
+    cartItemIdsRef.current = cartItemIds;
+  }, [cartItemIds]);
+
   const [isLoading, setIsLoading] = useState(false);
 
   // Chỉ lưu local cart khi chưa đăng nhập, hoặc lưu những sản phẩm đồng bộ thất bại khi đã đăng nhập
@@ -82,7 +87,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     const syncUserId = user.id;
 
     // Lấy các sản phẩm chưa đồng bộ (không có trong cartItemIds) làm fallback nếu không truyền failedItems
-    const itemsToMerge = failedItems || (currentItems || itemsRef.current).filter(item => !cartItemIds[item.product.id]);
+    const itemsToMerge = failedItems || (currentItems || itemsRef.current).filter(item => !cartItemIdsRef.current[item.product.id]);
 
     setIsLoading(true);
     try {
@@ -204,7 +209,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   const addItem = async (product: Product, quantity = 1) => {
     const oldItem = items.find(item => item.product.id === product.id);
     const oldQuantity = oldItem ? oldItem.quantity : 0;
-    const previousIds = { ...cartItemIds };
 
     // Optimistically update local UI immediately
     setItems(prev => {
@@ -236,7 +240,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               return prev.filter(item => item.product.id !== product.id);
             }
           });
-          setCartItemIds(previousIds);
         }
       } catch (err) {
         console.error('[CartContext] Lỗi thêm vào giỏ:', err);
@@ -248,7 +251,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
             return prev.filter(item => item.product.id !== product.id);
           }
         });
-        setCartItemIds(previousIds);
       } finally {
         setIsLoading(false);
       }
@@ -260,14 +262,13 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    */
   const removeItem = async (productId: string) => {
     const oldItem = items.find(item => item.product.id === productId);
-    const previousIds = { ...cartItemIds };
     const optimisticItems = items.filter(item => item.product.id !== productId);
 
     // Optimistically update local UI immediately
     setItems(optimisticItems);
 
     if (user) {
-      let cartItemId = cartItemIds[productId];
+      let cartItemId = cartItemIdsRef.current[productId];
       if (!cartItemId) {
         // Đồng bộ lại nếu thiếu mapping
         const freshIdMap = await syncWithServer(undefined, optimisticItems);
@@ -288,7 +289,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
             if (oldItem) {
               setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
             }
-            setCartItemIds(previousIds);
             return;
           }
           setCartItemIds(prev => {
@@ -302,7 +302,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           if (oldItem) {
             setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
           }
-          setCartItemIds(previousIds);
           return;
         } finally {
           setIsLoading(false);
@@ -313,7 +312,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         if (oldItem) {
           setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
         }
-        setCartItemIds(previousIds);
         return;
       }
     }
@@ -366,9 +364,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
       const finalQuantity = latestPending.targetQuantity;
       const originalQuantity = latestPending.originalQuantity;
-      const previousIds = { ...cartItemIds };
 
-      let cartItemId = cartItemIds[productId];
+      let cartItemId = cartItemIdsRef.current[productId];
       if (!cartItemId) {
         // Đồng bộ để tìm cartItemId nếu chưa có mapping
         const currentItemsSnapshot = itemsRef.current.map(item =>
@@ -398,7 +395,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                 item.product.id === productId ? { ...item, quantity: originalQuantity } : item
               )
             );
-            setCartItemIds(previousIds);
           }
         } catch (err) {
           console.error('[CartContext] Lỗi cập nhật số lượng:', err);
@@ -408,7 +404,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               item.product.id === productId ? { ...item, quantity: originalQuantity } : item
             )
           );
-          setCartItemIds(previousIds);
         } finally {
           setIsLoading(false);
         }
@@ -426,7 +421,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
                 item.product.id === productId ? { ...item, quantity: originalQuantity } : item
               )
             );
-            setCartItemIds(previousIds);
           }
         } catch (err) {
           console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
@@ -435,7 +429,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
               item.product.id === productId ? { ...item, quantity: originalQuantity } : item
             )
           );
-          setCartItemIds(previousIds);
         } finally {
           setIsLoading(false);
         }
@@ -448,7 +441,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    */
   const clearCart = async () => {
     const previousItems = [...items];
-    const previousIds = { ...cartItemIds };
 
     // Optimistically update local UI immediately
     setItems([]);
@@ -461,7 +453,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           console.error('[CartContext] Lỗi xoá giỏ hàng:', res.message);
           // targeted rollback
           setItems(previousItems);
-          setCartItemIds(previousIds);
           return;
         }
         setCartItemIds({});
@@ -469,7 +460,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         console.error('[CartContext] Lỗi xoá giỏ hàng:', err);
         // targeted rollback
         setItems(previousItems);
-        setCartItemIds(previousIds);
         return;
       } finally {
         setIsLoading(false);
