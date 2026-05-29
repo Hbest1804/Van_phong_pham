@@ -294,6 +294,7 @@ export async function updateOrderStatus(orderId, newStatus) {
     .from('orders')
     .update({ status: newStatus })
     .eq('id', orderId)
+    .eq('status', existing.status)   // optimistic lock: chặn race condition
     .select(
       `
       id, user_id, status, total, address, payment_method, note, created_at, updated_at,

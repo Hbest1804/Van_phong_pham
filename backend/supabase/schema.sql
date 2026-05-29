@@ -519,6 +519,8 @@ BEGIN
   END IF;
 
   -- 2. Validate từng sản phẩm và tính tổng tiền
+  --    FOR UPDATE OF p: khoá các dòng products trong suốt transaction,
+  --    ngăn transaction khác thay đổi stock/is_active trước khi INSERT order_items.
   FOR v_item IN
     SELECT
       ci.quantity,
@@ -530,6 +532,7 @@ BEGIN
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     WHERE ci.user_id = p_user_id
+    FOR UPDATE OF p
   LOOP
     IF NOT v_item.is_active THEN
       RAISE EXCEPTION 'Sản phẩm "%" đã ngừng kinh doanh.', v_item.product_name
