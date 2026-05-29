@@ -56,6 +56,24 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     itemsRef.current = items;
   }, [items]);
 
+  // Lưu trữ các thay đổi số lượng đang chờ xử lý để tránh race condition khi nhấn nút nhanh
+  const pendingUpdatesRef = useRef<Record<string, { 
+    targetQuantity: number; 
+    originalQuantity: number; 
+    timeoutId: any; 
+  }>>({});
+
+  useEffect(() => {
+    return () => {
+      // Dọn dẹp các timer chưa chạy khi component unmount
+      if (pendingUpdatesRef.current) {
+        Object.values(pendingUpdatesRef.current).forEach(pending => {
+          if (pending.timeoutId) clearTimeout(pending.timeoutId);
+        });
+      }
+    };
+  }, []);
+
   /**
    * Đồng bộ giỏ hàng từ server.
    */
@@ -310,27 +328,59 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    const oldItem = items.find(item => item.product.id === productId);
-    const oldQuantity = oldItem ? oldItem.quantity : null;
-    const previousIds = { ...cartItemIds };
-
-    const optimisticItems = items.map(item =>
-      item.product.id === productId ? { ...item, quantity } : item
+    // Cập nhật trạng thái local optimistic ngay lập tức để UI mượt mà
+    setItems(prev =>
+      prev.map(item =>
+        item.product.id === productId ? { ...item, quantity } : item
+      )
     );
-    // Optimistically update local UI immediately
-    setItems(optimisticItems);
 
-    if (user) {
+    if (!user) {
+      // Đối với khách vãng lai, useEffect lưu localStorage tự động hoạt động
+      return;
+    }
+
+    // Đối với người dùng đã đăng nhập, sử dụng debounce để tránh race condition khi click nhanh
+    let pending = pendingUpdatesRef.current[productId];
+
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+    } else {
+      const currentItem = itemsRef.current.find(item => item.product.id === productId);
+      const originalQuantity = currentItem ? currentItem.quantity : quantity;
+      pending = {
+        targetQuantity: quantity,
+        originalQuantity,
+        timeoutId: null
+      };
+      pendingUpdatesRef.current[productId] = pending;
+    }
+
+    pending.targetQuantity = quantity;
+
+    pending.timeoutId = setTimeout(async () => {
+      const latestPending = pendingUpdatesRef.current[productId];
+      delete pendingUpdatesRef.current[productId];
+
+      if (!latestPending) return;
+
+      const finalQuantity = latestPending.targetQuantity;
+      const originalQuantity = latestPending.originalQuantity;
+      const previousIds = { ...cartItemIds };
+
       let cartItemId = cartItemIds[productId];
       if (!cartItemId) {
-        // Đồng bộ lại nếu thiếu mapping
-        const freshIdMap = await syncWithServer(undefined, optimisticItems);
+        // Đồng bộ để tìm cartItemId nếu chưa có mapping
+        const currentItemsSnapshot = itemsRef.current.map(item =>
+          item.product.id === productId ? { ...item, quantity: finalQuantity } : item
+        );
+        const freshIdMap = await syncWithServer(undefined, currentItemsSnapshot);
         if (freshIdMap) {
           cartItemId = freshIdMap[productId];
-          // Re-apply optimistic update since syncWithServer overwrote it
+          // Đồng bộ ghi đè items, cần khôi phục lại quantity optimistic mới nhất
           setItems(prev =>
             prev.map(item =>
-              item.product.id === productId ? { ...item, quantity } : item
+              item.product.id === productId ? { ...item, quantity: finalQuantity } : item
             )
           );
         }
@@ -339,64 +389,58 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       if (cartItemId) {
         setIsLoading(true);
         try {
-          const res = await cartApi.updateCartItem(cartItemId, quantity);
+          const res = await cartApi.updateCartItem(cartItemId, finalQuantity);
           if (!res.success) {
             console.error('[CartContext] Lỗi cập nhật số lượng:', res.message);
-            // targeted rollback
-            if (oldQuantity !== null) {
-              setItems(prev => prev.map(item => item.product.id === productId ? { ...item, quantity: oldQuantity } : item));
-            } else {
-              setItems(prev => prev.filter(item => item.product.id !== productId));
-            }
+            // Rollback về giá trị ban đầu trước chuỗi click nhanh
+            setItems(prev =>
+              prev.map(item =>
+                item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+              )
+            );
             setCartItemIds(previousIds);
-            return;
           }
         } catch (err) {
           console.error('[CartContext] Lỗi cập nhật số lượng:', err);
-          // targeted rollback
-          if (oldQuantity !== null) {
-            setItems(prev => prev.map(item => item.product.id === productId ? { ...item, quantity: oldQuantity } : item));
-          } else {
-            setItems(prev => prev.filter(item => item.product.id !== productId));
-          }
+          // Rollback
+          setItems(prev =>
+            prev.map(item =>
+              item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+            )
+          );
           setCartItemIds(previousIds);
-          return;
         } finally {
           setIsLoading(false);
         }
       } else {
-        // Tự động thêm vào giỏ trên server nếu chưa có
+        // Tự động thêm vào giỏ trên server nếu chưa có mapping sau khi sync
         setIsLoading(true);
         try {
-          const res = await cartApi.addToCart(productId, quantity);
+          const res = await cartApi.addToCart(productId, finalQuantity);
           if (res.success && res.data) {
             setCartItemIds(prev => ({ ...prev, [productId]: res.data!.cartItemId }));
           } else {
             console.error('[CartContext] Lỗi tự động thêm vào giỏ:', res.message);
-            // targeted rollback
-            if (oldQuantity !== null) {
-              setItems(prev => prev.map(item => item.product.id === productId ? { ...item, quantity: oldQuantity } : item));
-            } else {
-              setItems(prev => prev.filter(item => item.product.id !== productId));
-            }
+            setItems(prev =>
+              prev.map(item =>
+                item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+              )
+            );
             setCartItemIds(previousIds);
-            return;
           }
         } catch (err) {
           console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
-          // targeted rollback
-          if (oldQuantity !== null) {
-            setItems(prev => prev.map(item => item.product.id === productId ? { ...item, quantity: oldQuantity } : item));
-          } else {
-            setItems(prev => prev.filter(item => item.product.id !== productId));
-          }
+          setItems(prev =>
+            prev.map(item =>
+              item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+            )
+          );
           setCartItemIds(previousIds);
-          return;
         } finally {
           setIsLoading(false);
         }
       }
-    }
+    }, 300); // Debounce 300ms
   };
 
   /**

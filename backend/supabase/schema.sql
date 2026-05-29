@@ -213,6 +213,8 @@ CREATE TABLE IF NOT EXISTS cart_items (
   UNIQUE (user_id, product_id)   -- mỗi sản phẩm chỉ xuất hiện 1 lần trong giỏ
 );
 
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+
 COMMENT ON TABLE  cart_items          IS 'Giỏ hàng phía server — mỗi row là 1 sản phẩm trong giỏ của 1 user';
 COMMENT ON COLUMN cart_items.quantity IS 'Số lượng sản phẩm, phải > 0';
 
@@ -389,6 +391,7 @@ RETURNS TABLE (
   quantity INT,
   message TEXT
 ) AS $$
+#variable_conflict use_column
 DECLARE
   v_stock INT;
   v_is_active BOOLEAN;
