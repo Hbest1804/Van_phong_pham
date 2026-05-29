@@ -38,8 +38,18 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  const prevUserRefForStorage = useRef(user);
+
   // Lưu trữ cục bộ giỏ hàng tùy theo trạng thái đăng nhập
   useEffect(() => {
+    const prevUser = prevUserRefForStorage.current;
+    prevUserRefForStorage.current = user;
+
+    // Skip persisting to guest cart immediately on logout to prevent privacy leak
+    if (prevUser && !user) {
+      return;
+    }
+
     if (!user) {
       localStorage.setItem('cart_items', JSON.stringify(items));
     } else {

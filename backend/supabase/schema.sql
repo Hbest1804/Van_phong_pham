@@ -464,10 +464,11 @@ BEGIN
   SELECT 
     p_user_id, 
     (item->>'productId')::UUID, 
-    LEAST((item->>'quantity')::INT, p.stock)
+    LEAST(SUM((item->>'quantity')::INT)::INT, p.stock)
   FROM jsonb_array_elements(p_items) AS item
   JOIN products p ON p.id = (item->>'productId')::UUID
   WHERE p.is_active = TRUE AND p.stock > 0
+  GROUP BY (item->>'productId')::UUID, p.stock
   ON CONFLICT (user_id, product_id)
   DO UPDATE SET 
     quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (
