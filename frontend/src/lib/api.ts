@@ -355,3 +355,93 @@ export const cartApi = {
       body: JSON.stringify({ items }),
     }),
 };
+
+// ── Orders API ────────────────────────────────────────────────────────────────
+
+export interface OrderItemApi {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface OrderApi {
+  id: string;
+  userId?: string;
+  status: 'pending' | 'shipping' | 'completed' | 'cancelled';
+  total: number;
+  address: string;
+  paymentMethod: 'cod' | 'transfer';
+  note: string;
+  createdAt: string;
+  updatedAt: string;
+  items: OrderItemApi[];
+}
+
+export interface PaginatedOrders {
+  orders: OrderApi[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface CreateOrderPayload {
+  address: string;
+  paymentMethod?: 'cod' | 'transfer';
+  note?: string;
+}
+
+export const ordersApi = {
+  /**
+   * POST /api/v1/orders
+   * Tạo đơn hàng từ giỏ hàng hiện tại.
+   */
+  createOrder: (payload: CreateOrderPayload) =>
+    request<OrderApi>('/orders', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  /**
+   * GET /api/v1/orders/my
+   * Lấy lịch sử đơn hàng của người dùng đang đăng nhập.
+   */
+  getMyOrders: (page = 1, limit = 10) =>
+    request<PaginatedOrders>(`/orders/my?page=${page}&limit=${limit}`, {
+      method: 'GET',
+    }),
+
+  /**
+   * GET /api/v1/orders/:id
+   * Chi tiết một đơn hàng (user xem của mình, admin xem tất cả).
+   */
+  getOrderById: (id: string) =>
+    request<OrderApi>(`/orders/${id}`, {
+      method: 'GET',
+    }),
+
+  /**
+   * GET /api/v1/orders  (Admin only)
+   * Lấy tất cả đơn hàng, hỗ trợ lọc theo status và phân trang.
+   */
+  getAllOrders: (page = 1, limit = 10, status?: string) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (status) params.append('status', status);
+    return request<PaginatedOrders>(`/orders?${params.toString()}`, {
+      method: 'GET',
+    });
+  },
+
+  /**
+   * PATCH /api/v1/orders/:id/status  (Admin only)
+   * Cập nhật trạng thái đơn hàng.
+   */
+  updateOrderStatus: (id: string, status: string) =>
+    request<OrderApi>(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+};
