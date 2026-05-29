@@ -303,7 +303,7 @@ export async function updateOrderStatus(orderId, newStatus) {
       )
     `
     )
-    .single();
+    .maybeSingle();   // dùng maybeSingle() để không throw khi 0 rows matched
 
   if (updateError) {
     console.error('[order.service] Lỗi cập nhật trạng thái đơn hàng:', updateError.message);
@@ -313,6 +313,14 @@ export async function updateOrderStatus(orderId, newStatus) {
       throw new AppError(updateError.message, 422);
     }
     throw new AppError('Không thể cập nhật trạng thái đơn hàng.', 500);
+  }
+
+  // Optimistic lock thất bại: trạng thái đã bị thay đổi bởi request khác trước khi update
+  if (!updated) {
+    throw new AppError(
+      `Trạng thái đơn hàng đã bị thay đổi bởi request khác. Vui lòng tải lại và thử lại.`,
+      409  // 409 Conflict
+    );
   }
 
   return { ...mapOrder(updated), userId: updated.user_id };

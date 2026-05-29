@@ -510,17 +510,19 @@ DECLARE
   v_total    NUMERIC := 0;
   v_item     RECORD;
 BEGIN
-  -- 1. Kiểm tra giỏ hàng không rỗng (tồn tại ít nhất 1 sản phẩm)
-  IF NOT EXISTS (
-    SELECT 1 FROM cart_items WHERE user_id = p_user_id
-  ) THEN
+  -- 1. Khoá toàn bộ cart_items của user ngay từ đầu (FOR UPDATE):
+  --    - Serialize concurrent checkouts: request thứ 2 phải chờ request 1 commit/rollback.
+  --    - NOT FOUND sau PERFORM = giỏ hàng thực sự rỗng → báo lỗi P0001.
+  PERFORM 1 FROM cart_items WHERE user_id = p_user_id FOR UPDATE;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'Giỏ hàng trống. Vui lòng thêm sản phẩm trước khi đặt hàng.'
       USING ERRCODE = 'P0001';
   END IF;
 
   -- 2. Validate từng sản phẩm và tính tổng tiền
-  --    FOR UPDATE OF p: khoá các dòng products trong suốt transaction,
-  --    ngăn transaction khác thay đổi stock/is_active trước khi INSERT order_items.
+  --    FOR UPDATE OF p: khoá các dòng products trong suốt transaction.
+  --    ORDER BY p.id: đảm bảo thứ tự khoá NHẤT ĐỊNH giữa các transaction
+  --    → loại bỏ hoàn toàn nguy cơ deadlock khi nhiều user cùng mua chung sản phẩm.
   FOR v_item IN
     SELECT
       ci.quantity,
@@ -532,6 +534,7 @@ BEGIN
     FROM cart_items ci
     JOIN products p ON p.id = ci.product_id
     WHERE ci.user_id = p_user_id
+    ORDER BY p.id          -- deterministic lock order → no deadlock
     FOR UPDATE OF p
   LOOP
     IF NOT v_item.is_active THEN
