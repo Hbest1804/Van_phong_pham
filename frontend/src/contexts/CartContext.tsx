@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { CartItem, Product } from '../types';
 import { cartApi } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 // cartItemId map: productId → cartItemId (UUID từ server)
 type CartItemIdMap = Record<string, string>;
@@ -14,12 +15,13 @@ interface CartContextType {
   total: number;
   itemCount: number;
   isLoading: boolean;
-  syncWithServer: () => Promise<void>;
+  syncWithServer: () => Promise<CartItemIdMap | null>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>(() => {
     const stored = localStorage.getItem('cart_items');
     return stored ? JSON.parse(stored) : [];
@@ -33,13 +35,11 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     localStorage.setItem('cart_items', JSON.stringify(items));
   }, [items]);
 
-  const isLoggedIn = () => !!localStorage.getItem('accessToken');
-
   /**
    * Đồng bộ giỏ hàng từ server.
    */
-  const syncWithServer = async () => {
-    if (!isLoggedIn()) return;
+  const syncWithServer = async (): Promise<CartItemIdMap | null> => {
+    if (!user) return null;
 
     setIsLoading(true);
     try {
@@ -57,25 +57,67 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           idMap[item.product.id] = item.cartItemId;
         });
         setCartItemIds(idMap);
+        return idMap;
       }
     } catch (err) {
       console.error('[CartContext] Không thể đồng bộ giỏ hàng:', err);
     } finally {
       setIsLoading(false);
     }
+    return null;
   };
 
-  // Tự động sync khi mount nếu user đã đăng nhập
+  // Đồng bộ hoặc merge khi trạng thái đăng nhập (user) thay đổi
+  const prevUserRef = useRef<any>(undefined);
+
   useEffect(() => {
-    syncWithServer();
+    const handleAuthChange = async () => {
+      const prevUser = prevUserRef.current;
+      prevUserRef.current = user;
+
+      // Initial mount
+      if (prevUser === undefined) {
+        if (user) {
+          await syncWithServer();
+        }
+        return;
+      }
+
+      // Đăng nhập (Guest -> Member)
+      if (user && !prevUser) {
+        const localItems = [...items];
+        if (localItems.length > 0) {
+          setIsLoading(true);
+          try {
+            // Đẩy tất cả local items lên server
+            await Promise.all(
+              localItems.map(item =>
+                cartApi.addToCart(item.product.id, item.quantity)
+              )
+            );
+          } catch (err) {
+            console.error('[CartContext] Lỗi đồng bộ giỏ hàng vô danh lên server:', err);
+          }
+        }
+        // Đồng bộ lại giỏ hàng từ server
+        await syncWithServer();
+      }
+      // Đăng xuất (Member -> Guest)
+      else if (!user && prevUser) {
+        setItems([]);
+        setCartItemIds({});
+      }
+    };
+
+    handleAuthChange();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   /**
    * Thêm sản phẩm vào giỏ.
    */
   const addItem = async (product: Product, quantity = 1) => {
-    if (isLoggedIn()) {
+    if (user) {
       setIsLoading(true);
       try {
         const res = await cartApi.addToCart(product.id, quantity);
@@ -118,8 +160,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá một sản phẩm khỏi giỏ.
    */
   const removeItem = async (productId: string) => {
-    if (isLoggedIn()) {
-      const cartItemId = cartItemIds[productId];
+    if (user) {
+      let cartItemId = cartItemIds[productId];
+      if (!cartItemId) {
+        // Đồng bộ lại nếu thiếu mapping
+        const freshIdMap = await syncWithServer();
+        if (freshIdMap) {
+          cartItemId = freshIdMap[productId];
+        }
+      }
+
       if (cartItemId) {
         setIsLoading(true);
         try {
@@ -134,6 +184,8 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         } finally {
           setIsLoading(false);
         }
+      } else {
+        console.warn(`[CartContext] Không tìm thấy cartItemId cho sản phẩm ${productId} trên server.`);
       }
     }
     setItems(prev => prev.filter(item => item.product.id !== productId));
@@ -148,8 +200,16 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
-    if (isLoggedIn()) {
-      const cartItemId = cartItemIds[productId];
+    if (user) {
+      let cartItemId = cartItemIds[productId];
+      if (!cartItemId) {
+        // Đồng bộ lại nếu thiếu mapping
+        const freshIdMap = await syncWithServer();
+        if (freshIdMap) {
+          cartItemId = freshIdMap[productId];
+        }
+      }
+
       if (cartItemId) {
         setIsLoading(true);
         try {
@@ -157,6 +217,20 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (err) {
           console.error('[CartContext] Lỗi cập nhật số lượng:', err);
           return; // Không cập nhật local nếu server lỗi
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // Tự động thêm vào giỏ trên server nếu chưa có
+        setIsLoading(true);
+        try {
+          const res = await cartApi.addToCart(productId, quantity);
+          if (res.success && res.data) {
+            setCartItemIds(prev => ({ ...prev, [productId]: res.data!.cartItemId }));
+          }
+        } catch (err) {
+          console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
+          return;
         } finally {
           setIsLoading(false);
         }
@@ -174,7 +248,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
    * Xoá toàn bộ giỏ hàng.
    */
   const clearCart = async () => {
-    if (isLoggedIn()) {
+    if (user) {
       setIsLoading(true);
       try {
         await cartApi.clearCart();

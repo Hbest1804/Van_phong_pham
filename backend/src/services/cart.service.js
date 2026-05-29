@@ -224,7 +224,11 @@ export async function updateCartItem(userId, cartItemId, quantity) {
     .eq('id', cartItem.product_id)
     .maybeSingle();
 
-  if (productError || !product) {
+  if (productError) {
+    console.error('[cart.service] Lỗi kiểm tra sản phẩm:', productError.message);
+    throw new AppError('Không thể kiểm tra sản phẩm. Vui lòng thử lại.', 500);
+  }
+  if (!product) {
     throw new AppError('Sản phẩm không tồn tại.', 404);
   }
   if (!product.is_active) {
