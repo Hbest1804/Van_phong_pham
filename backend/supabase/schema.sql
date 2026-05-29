@@ -401,6 +401,12 @@ DECLARE
   v_existing_quantity INT;
   v_message TEXT;
 BEGIN
+  -- 0. Khoá cart_items TRƯỚC để giữ thứ tự khoá nhất quán với create_order_transaction
+  --    (cart_items → products), tránh deadlock khi checkout và add-to-cart chạy song song.
+  PERFORM 1 FROM cart_items
+  WHERE user_id = p_user_id AND product_id = p_product_id
+  FOR UPDATE;
+
   -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
   SELECT stock, is_active INTO v_stock, v_is_active
   FROM products
@@ -575,8 +581,15 @@ BEGIN
   JOIN products p ON p.id = ci.product_id
   WHERE ci.user_id = p_user_id;
 
-  -- 5. Xoá giỏ hàng sau khi đặt hàng thành công
-  DELETE FROM cart_items WHERE user_id = p_user_id;
+  -- 5. Xoá chỉ các sản phẩm đã đặt khỏi giỏ hàng
+  --    (tránh xoá nhầm sản phẩm mới thêm song song ở tab khác)
+  DELETE FROM cart_items
+  WHERE user_id = p_user_id
+    AND product_id IN (
+      SELECT product_id
+      FROM order_items
+      WHERE order_id = v_order_id
+    );
 
   RETURN v_order_id;
 END;

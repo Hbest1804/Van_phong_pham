@@ -49,7 +49,13 @@ export function Checkout() {
       });
 
       if (res.success) {
-        await clearCart();
+        try {
+          await clearCart();
+        } catch (cartErr) {
+          // Đơn hàng đã tạo thành công trên server — lỗi xoá giỏ hàng local
+          // không được ngăn người dùng thấy màn hình thành công.
+          console.error('[Checkout] clearCart failed (order still created):', cartErr);
+        }
         setIsSuccess(true);
       } else {
         setError(res.message || 'Đặt hàng thất bại. Vui lòng thử lại.');
