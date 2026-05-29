@@ -144,70 +144,20 @@ export async function addToCart(userId, productId, quantity = 1) {
   }
 
   // ── 4. Upsert vào cart_items ─────────────────────────────────────────────
-  let cartItem;
-  let upsertError;
-
-  if (existing) {
-    // Tăng số lượng nếu đã có
-    const { data, error } = await supabaseAdmin
-      .from('cart_items')
-      .update({ quantity: newQuantity })
-      .eq('id', existing.id)
-      .select('id, quantity, product_id')
-      .single();
-
-    cartItem = data;
-    upsertError = error;
-  } else {
-    // Thêm mới
-    const { data, error } = await supabaseAdmin
-      .from('cart_items')
-      .insert({ user_id: userId, product_id: productId, quantity: qty })
-      .select('id, quantity, product_id')
-      .single();
-
-    cartItem = data;
-    upsertError = error;
-  }
+  const { data: cartItem, error: upsertError } = await supabaseAdmin
+    .from('cart_items')
+    .upsert(
+      {
+        user_id: userId,
+        product_id: productId,
+        quantity: newQuantity,
+      },
+      { onConflict: 'user_id,product_id' }
+    )
+    .select('id, quantity, product_id')
+    .single();
 
   if (upsertError) {
-    if (upsertError.code === '23505') {
-      // Race condition recovery: another concurrent insert succeeded.
-      // Re-fetch the item and update it instead.
-      const { data: retryExisting, error: retryFindError } = await supabaseAdmin
-        .from('cart_items')
-        .select('id, quantity')
-        .eq('user_id', userId)
-        .eq('product_id', productId)
-        .maybeSingle();
-
-      if (!retryFindError && retryExisting) {
-        const retryNewQty = retryExisting.quantity + qty;
-        if (retryNewQty <= product.stock) {
-          const { data: retryUpdate, error: retryUpdateError } = await supabaseAdmin
-            .from('cart_items')
-            .update({ quantity: retryNewQty })
-            .eq('id', retryExisting.id)
-            .select('id, quantity, product_id')
-            .single();
-
-          if (!retryUpdateError && retryUpdate) {
-            return {
-              cartItemId: retryUpdate.id,
-              productId: retryUpdate.product_id,
-              quantity: retryUpdate.quantity,
-              message: 'Đã cập nhật số lượng trong giỏ hàng.',
-            };
-          }
-        } else {
-          throw new AppError(
-            `Số lượng vượt quá tồn kho. Hiện còn ${product.stock} sản phẩm.`,
-            400
-          );
-        }
-      }
-    }
-
     console.error('[cart.service] Lỗi thêm vào giỏ:', upsertError.message);
     throw new AppError('Không thể thêm sản phẩm vào giỏ hàng.', 500);
   }
@@ -312,32 +262,21 @@ export async function removeCartItem(userId, cartItemId) {
     throw new AppError('Thông tin không hợp lệ.', 400);
   }
 
-  // Kiểm tra tồn tại & quyền sở hữu
-  const { data: cartItem, error: findError } = await supabaseAdmin
-    .from('cart_items')
-    .select('id, user_id')
-    .eq('id', cartItemId)
-    .maybeSingle();
-
-  if (findError) {
-    console.error('[cart.service] Lỗi tìm cart item:', findError.message);
-    throw new AppError('Không thể tìm mục giỏ hàng.', 500);
-  }
-  if (!cartItem) {
-    throw new AppError('Mục giỏ hàng không tồn tại.', 404);
-  }
-  if (cartItem.user_id !== userId) {
-    throw new AppError('Bạn không có quyền xoá mục này.', 403);
-  }
-
-  const { error: deleteError } = await supabaseAdmin
+  // Kết hợp kiểm tra quyền sở hữu và xoá trong một truy vấn duy nhất
+  const { data, error: deleteError } = await supabaseAdmin
     .from('cart_items')
     .delete()
-    .eq('id', cartItemId);
+    .eq('id', cartItemId)
+    .eq('user_id', userId)
+    .select('id');
 
   if (deleteError) {
     console.error('[cart.service] Lỗi xoá cart item:', deleteError.message);
     throw new AppError('Không thể xoá sản phẩm khỏi giỏ hàng.', 500);
+  }
+
+  if (!data || data.length === 0) {
+    throw new AppError('Mục giỏ hàng không tồn tại hoặc bạn không có quyền xoá.', 404);
   }
 }
 

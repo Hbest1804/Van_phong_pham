@@ -45,11 +45,20 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [items, user, cartItemIds]);
 
+  // Sử dụng itemsRef để tránh stale closure trong useEffect lắng nghe auth thay đổi
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   /**
    * Đồng bộ giỏ hàng từ server.
    */
-  const syncWithServer = async (failedItems: CartItem[] = []): Promise<CartItemIdMap | null> => {
+  const syncWithServer = async (failedItems?: CartItem[]): Promise<CartItemIdMap | null> => {
     if (!user) return null;
+
+    // Lấy các sản phẩm chưa đồng bộ (không có trong cartItemIds) làm fallback nếu không truyền failedItems
+    const itemsToMerge = failedItems || itemsRef.current.filter(item => !cartItemIds[item.product.id]);
 
     setIsLoading(true);
     try {
@@ -62,7 +71,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
         // Gộp các sản phẩm đồng bộ thất bại vào giỏ hàng hiển thị
         const mergedItems = [...serverItems];
-        failedItems.forEach(failed => {
+        itemsToMerge.forEach(failed => {
           const exists = mergedItems.some(item => item.product.id === failed.product.id);
           if (!exists) {
             mergedItems.push(failed);
@@ -85,12 +94,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     }
     return null;
   };
-
-  // Sử dụng itemsRef để tránh stale closure trong useEffect lắng nghe auth thay đổi
-  const itemsRef = useRef(items);
-  useEffect(() => {
-    itemsRef.current = items;
-  }, [items]);
 
   // Đồng bộ hoặc merge khi trạng thái đăng nhập (user) thay đổi
   const prevUserRef = useRef<any>(undefined);
