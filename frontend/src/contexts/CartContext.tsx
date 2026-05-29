@@ -72,8 +72,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       // Dọn dẹp các timer chưa chạy khi component unmount
       if (pendingUpdatesRef.current) {
-        Object.values(pendingUpdatesRef.current).forEach(pending => {
-          if (pending.timeoutId) clearTimeout(pending.timeoutId);
+        Object.keys(pendingUpdatesRef.current).forEach(key => {
+          const pending = pendingUpdatesRef.current[key];
+          if (pending && pending.timeoutId) clearTimeout(pending.timeoutId);
         });
       }
     };
