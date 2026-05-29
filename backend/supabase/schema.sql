@@ -445,3 +445,34 @@ BEGIN
   RETURN NEXT;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 16. HÀM DATABASE: sync_cart_bulk
+--     Đồng bộ giỏ hàng của người dùng từ giỏ hàng guest (JSONB) lên server atomically.
+--     Kiểm tra tồn kho và trạng thái hoạt động của sản phẩm ngay trong database.
+-- ============================================================
+CREATE OR REPLACE FUNCTION sync_cart_bulk(
+  p_user_id UUID,
+  p_items JSONB
+)
+RETURNS VOID AS $$
+#variable_conflict use_column
+BEGIN
+  -- Thêm/Cập nhật các mặt hàng từ JSONB
+  INSERT INTO cart_items (user_id, product_id, quantity)
+  SELECT 
+    p_user_id, 
+    (item->>'productId')::UUID, 
+    LEAST((item->>'quantity')::INT, p.stock)
+  FROM jsonb_array_elements(p_items) AS item
+  JOIN products p ON p.id = (item->>'productId')::UUID
+  WHERE p.is_active = TRUE
+  ON CONFLICT (user_id, product_id)
+  DO UPDATE SET 
+    quantity = LEAST(cart_items.quantity + EXCLUDED.quantity, (
+      SELECT stock FROM products WHERE id = EXCLUDED.product_id
+    )),
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;

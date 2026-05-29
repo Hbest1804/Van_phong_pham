@@ -3,9 +3,6 @@ import { CartItem, Product } from '../types';
 import { cartApi } from '../lib/api';
 import { useAuth } from './AuthContext';
 
-// cartItemId map: productId → cartItemId (UUID từ server)
-type CartItemIdMap = Record<string, string>;
-
 interface CartContextType {
   items: CartItem[];
   addItem: (product: Product, quantity?: number) => Promise<void>;
@@ -15,7 +12,7 @@ interface CartContextType {
   total: number;
   itemCount: number;
   isLoading: boolean;
-  syncWithServer: (failedItems?: CartItem[], currentItems?: CartItem[]) => Promise<CartItemIdMap | null>;
+  syncWithServer: () => Promise<void>;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -28,32 +25,23 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   }, [user]);
 
   const [items, setItems] = useState<CartItem[]>(() => {
-    const stored = localStorage.getItem('cart_items');
+    const storedUser = localStorage.getItem('auth_user');
+    const userObj = storedUser ? JSON.parse(storedUser) : null;
+    const key = userObj ? `cart_items_${userObj.id}` : 'cart_items';
+    const stored = localStorage.getItem(key);
     return stored ? JSON.parse(stored) : [];
   });
-  // Map productId → cartItemId (UUID server) để gọi PUT/DELETE
-  const [cartItemIds, setCartItemIds] = useState<CartItemIdMap>({});
-  const cartItemIdsRef = useRef(cartItemIds);
-  useEffect(() => {
-    cartItemIdsRef.current = cartItemIds;
-  }, [cartItemIds]);
-
   const [isLoading, setIsLoading] = useState(false);
 
-  // Chỉ lưu local cart khi chưa đăng nhập, hoặc lưu những sản phẩm đồng bộ thất bại khi đã đăng nhập
+  // Lưu trữ cục bộ giỏ hàng tùy theo trạng thái đăng nhập
   useEffect(() => {
     if (!user) {
       localStorage.setItem('cart_items', JSON.stringify(items));
     } else {
-      // Khi đã đăng nhập, lọc ra các sản phẩm chưa có trong map cartItemIds (đồng bộ thất bại)
-      const unsyncedItems = items.filter(item => !cartItemIds[item.product.id]);
-      if (unsyncedItems.length > 0) {
-        localStorage.setItem('cart_items', JSON.stringify(unsyncedItems));
-      } else {
-        localStorage.removeItem('cart_items');
-      }
+      localStorage.setItem(`cart_items_${user.id}`, JSON.stringify(items));
+      localStorage.removeItem('cart_items');
     }
-  }, [items, user, cartItemIds]);
+  }, [items, user]);
 
   // Sử dụng itemsRef để tránh stale closure trong useEffect lắng nghe auth thay đổi
   const itemsRef = useRef(items);
@@ -83,12 +71,9 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
   /**
    * Đồng bộ giỏ hàng từ server.
    */
-  const syncWithServer = async (failedItems?: CartItem[], currentItems?: CartItem[]): Promise<CartItemIdMap | null> => {
-    if (!user) return null;
+  const syncWithServer = async (): Promise<void> => {
+    if (!user) return;
     const syncUserId = user.id;
-
-    // Lấy các sản phẩm chưa đồng bộ (không có trong cartItemIds) làm fallback nếu không truyền failedItems
-    const itemsToMerge = failedItems || (currentItems || itemsRef.current).filter(item => !cartItemIdsRef.current[item.product.id]);
 
     setIsLoading(true);
     try {
@@ -96,7 +81,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
 
       // Kiểm tra xem user có bị thay đổi trong quá trình gọi API hay không
       if (currentUserRef.current?.id !== syncUserId) {
-        return null;
+        return;
       }
 
       if (res.success && res.data) {
@@ -104,24 +89,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           product: item.product,
           quantity: item.quantity,
         }));
-
-        // Gộp các sản phẩm đồng bộ thất bại vào giỏ hàng hiển thị
-        const mergedItems = [...serverItems];
-        itemsToMerge.forEach(failed => {
-          const exists = mergedItems.some(item => item.product.id === failed.product.id);
-          if (!exists) {
-            mergedItems.push(failed);
-          }
-        });
-        setItems(mergedItems);
-
-        // Cập nhật map productId → cartItemId
-        const idMap: CartItemIdMap = {};
-        res.data.items.forEach(item => {
-          idMap[item.product.id] = item.cartItemId;
-        });
-        setCartItemIds(idMap);
-        return idMap;
+        setItems(serverItems);
       }
     } catch (err) {
       console.error('[CartContext] Không thể đồng bộ giỏ hàng:', err);
@@ -130,7 +98,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         setIsLoading(false);
       }
     }
-    return null;
   };
 
   // Đồng bộ hoặc merge khi trạng thái đăng nhập (user) thay đổi
@@ -155,45 +122,30 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
         const localItems = [...itemsRef.current];
         if (localItems.length > 0) {
           setIsLoading(true);
-          const failedItems: CartItem[] = [];
-          const failedNames: string[] = [];
-
-          // Đẩy tất cả local items lên server tuần tự để tránh nghẽn/rate-limiting/race condition
-          for (const item of localItems) {
-            if (!active) return;
-            try {
-              const res = await cartApi.addToCart(item.product.id, item.quantity);
-              if (!res.success) {
-                console.error(`[CartContext] Lỗi đồng bộ SP ${item.product.name}:`, res.message);
-                failedItems.push(item);
-                failedNames.push(item.product.name);
-              }
-            } catch (err) {
-              console.error(`[CartContext] Lỗi đồng bộ SP ${item.product.name}:`, err);
-              failedItems.push(item);
-              failedNames.push(item.product.name);
+          try {
+            const payload = localItems.map(item => ({
+              productId: item.product.id,
+              quantity: item.quantity,
+            }));
+            const res = await cartApi.bulkSyncCart(payload);
+            if (!res.success) {
+              console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', res.message);
+              alert('Không thể đồng bộ giỏ hàng của bạn lên máy chủ.');
             }
+          } catch (err) {
+            console.error('[CartContext] Lỗi đồng bộ giỏ hàng bulk:', err);
+            alert('Có lỗi xảy ra khi đồng bộ giỏ hàng.');
           }
-
-          if (failedNames.length > 0 && active) {
-            alert(`Không thể đồng bộ một số sản phẩm vào giỏ hàng trên máy chủ (có thể do hết hàng hoặc lỗi kết nối):\n- ${failedNames.join('\n- ')}`);
-          }
-
-          // Đồng bộ lại giỏ hàng từ server, gộp các sản phẩm thất bại
-          if (active) {
-            await syncWithServer(failedItems);
-          }
-        } else {
-          if (active) {
-            await syncWithServer();
-          }
+        }
+        if (active) {
+          await syncWithServer();
         }
       }
       // Đăng xuất (Member -> Guest)
       else if (!user && prevUser) {
         if (active) {
           setItems([]);
-          setCartItemIds({});
+          localStorage.removeItem(`cart_items_${prevUser.id}`);
         }
       }
     };
@@ -228,10 +180,7 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       setIsLoading(true);
       try {
         const res = await cartApi.addToCart(product.id, quantity);
-        if (res.success && res.data) {
-          // Lưu cartItemId mới nhận về
-          setCartItemIds(prev => ({ ...prev, [product.id]: res.data!.cartItemId }));
-        } else {
+        if (!res.success) {
           console.error('[CartContext] Lỗi thêm vào giỏ:', res.message);
           // targeted rollback
           setItems(prev => {
@@ -269,51 +218,26 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
     setItems(optimisticItems);
 
     if (user) {
-      let cartItemId = cartItemIdsRef.current[productId];
-      if (!cartItemId) {
-        // Đồng bộ lại nếu thiếu mapping
-        const freshIdMap = await syncWithServer(undefined, optimisticItems);
-        if (freshIdMap) {
-          cartItemId = freshIdMap[productId];
-          // Re-apply optimistic update since syncWithServer overwrote it
-          setItems(prev => prev.filter(item => item.product.id !== productId));
-        }
-      }
-
-      if (cartItemId) {
-        setIsLoading(true);
-        try {
-          const res = await cartApi.removeFromCart(cartItemId);
-          if (res && !res.success) {
-            console.error('[CartContext] Lỗi xoá sản phẩm:', res.message);
-            // targeted rollback
-            if (oldItem) {
-              setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
-            }
-            return;
-          }
-          setCartItemIds(prev => {
-            const next = { ...prev };
-            delete next[productId];
-            return next;
-          });
-        } catch (err) {
-          console.error('[CartContext] Lỗi xoá sản phẩm:', err);
+      setIsLoading(true);
+      try {
+        const res = await cartApi.removeFromCart(productId);
+        if (res && !res.success) {
+          console.error('[CartContext] Lỗi xoá sản phẩm:', res.message);
           // targeted rollback
           if (oldItem) {
             setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
           }
           return;
-        } finally {
-          setIsLoading(false);
         }
-      } else {
-        console.warn(`[CartContext] Không tìm thấy cartItemId cho sản phẩm ${productId} trên server.`);
+      } catch (err) {
+        console.error('[CartContext] Lỗi xoá sản phẩm:', err);
         // targeted rollback
         if (oldItem) {
           setItems(prev => prev.some(i => i.product.id === productId) ? prev : [...prev, oldItem]);
         }
         return;
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -366,73 +290,28 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
       const finalQuantity = latestPending.targetQuantity;
       const originalQuantity = latestPending.originalQuantity;
 
-      let cartItemId = cartItemIdsRef.current[productId];
-      if (!cartItemId) {
-        // Đồng bộ để tìm cartItemId nếu chưa có mapping
-        const currentItemsSnapshot = itemsRef.current.map(item =>
-          item.product.id === productId ? { ...item, quantity: finalQuantity } : item
+      setIsLoading(true);
+      try {
+        const res = await cartApi.updateCartItem(productId, finalQuantity);
+        if (!res.success) {
+          console.error('[CartContext] Lỗi cập nhật số lượng:', res.message);
+          // Rollback về giá trị ban đầu trước chuỗi click nhanh
+          setItems(prev =>
+            prev.map(item =>
+              item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+            )
+          );
+        }
+      } catch (err) {
+        console.error('[CartContext] Lỗi cập nhật số lượng:', err);
+        // Rollback
+        setItems(prev =>
+          prev.map(item =>
+            item.product.id === productId ? { ...item, quantity: originalQuantity } : item
+          )
         );
-        const freshIdMap = await syncWithServer(undefined, currentItemsSnapshot);
-        if (freshIdMap) {
-          cartItemId = freshIdMap[productId];
-          // Đồng bộ ghi đè items, cần khôi phục lại quantity optimistic mới nhất
-          setItems(prev =>
-            prev.map(item =>
-              item.product.id === productId ? { ...item, quantity: finalQuantity } : item
-            )
-          );
-        }
-      }
-
-      if (cartItemId) {
-        setIsLoading(true);
-        try {
-          const res = await cartApi.updateCartItem(cartItemId, finalQuantity);
-          if (!res.success) {
-            console.error('[CartContext] Lỗi cập nhật số lượng:', res.message);
-            // Rollback về giá trị ban đầu trước chuỗi click nhanh
-            setItems(prev =>
-              prev.map(item =>
-                item.product.id === productId ? { ...item, quantity: originalQuantity } : item
-              )
-            );
-          }
-        } catch (err) {
-          console.error('[CartContext] Lỗi cập nhật số lượng:', err);
-          // Rollback
-          setItems(prev =>
-            prev.map(item =>
-              item.product.id === productId ? { ...item, quantity: originalQuantity } : item
-            )
-          );
-        } finally {
-          setIsLoading(false);
-        }
-      } else {
-        // Tự động thêm vào giỏ trên server nếu chưa có mapping sau khi sync
-        setIsLoading(true);
-        try {
-          const res = await cartApi.addToCart(productId, finalQuantity);
-          if (res.success && res.data) {
-            setCartItemIds(prev => ({ ...prev, [productId]: res.data!.cartItemId }));
-          } else {
-            console.error('[CartContext] Lỗi tự động thêm vào giỏ:', res.message);
-            setItems(prev =>
-              prev.map(item =>
-                item.product.id === productId ? { ...item, quantity: originalQuantity } : item
-              )
-            );
-          }
-        } catch (err) {
-          console.error('[CartContext] Lỗi tự động thêm vào giỏ khi updateQuantity:', err);
-          setItems(prev =>
-            prev.map(item =>
-              item.product.id === productId ? { ...item, quantity: originalQuantity } : item
-            )
-          );
-        } finally {
-          setIsLoading(false);
-        }
+      } finally {
+        setIsLoading(false);
       }
     }, 300); // Debounce 300ms
   };
@@ -456,7 +335,6 @@ export const CartProvider = ({ children }: { children: React.ReactNode }) => {
           setItems(previousItems);
           return;
         }
-        setCartItemIds({});
       } catch (err) {
         console.error('[CartContext] Lỗi xoá giỏ hàng:', err);
         // targeted rollback

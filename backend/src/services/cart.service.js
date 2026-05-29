@@ -140,12 +140,12 @@ export async function addToCart(userId, productId, quantity = 1) {
  * - Validate: cart item thuộc về user (chống sửa của người khác).
  * - Validate: số lượng mới không vượt tồn kho.
  *
- * @param {string} userId     - UUID người dùng
- * @param {string} cartItemId - UUID của cart_items row
- * @param {number} quantity   - Số lượng mới (phải >= 1)
+ * @param {string} userId    - UUID người dùng
+ * @param {string} productId - UUID sản phẩm
+ * @param {number} quantity  - Số lượng mới (phải >= 1)
  */
-export async function updateCartItem(userId, cartItemId, quantity) {
-  if (!userId || !cartItemId) {
+export async function updateCartItem(userId, productId, quantity) {
+  if (!userId || !productId) {
     throw new AppError('Thông tin không hợp lệ.', 400);
   }
 
@@ -167,7 +167,8 @@ export async function updateCartItem(userId, cartItemId, quantity) {
         is_active
       )
     `)
-    .eq('id', cartItemId)
+    .eq('user_id', userId)
+    .eq('product_id', productId)
     .maybeSingle();
 
   if (findError) {
@@ -175,10 +176,7 @@ export async function updateCartItem(userId, cartItemId, quantity) {
     throw new AppError('Không thể tìm mục giỏ hàng.', 500);
   }
   if (!cartItem) {
-    throw new AppError('Mục giỏ hàng không tồn tại.', 404);
-  }
-  if (cartItem.user_id !== userId) {
-    throw new AppError('Bạn không có quyền chỉnh sửa mục này.', 403);
+    throw new AppError('Sản phẩm không có trong giỏ hàng.', 404);
   }
 
   const product = cartItem.products;
@@ -199,8 +197,8 @@ export async function updateCartItem(userId, cartItemId, quantity) {
   const { data: updated, error: updateError } = await supabaseAdmin
     .from('cart_items')
     .update({ quantity: qty })
-    .eq('id', cartItemId)
     .eq('user_id', userId)
+    .eq('product_id', productId)
     .select('id, quantity, product_id')
     .single();
 
@@ -218,13 +216,12 @@ export async function updateCartItem(userId, cartItemId, quantity) {
 
 /**
  * Xoá một sản phẩm khỏi giỏ hàng.
- * Kiểm tra cart item thuộc về user trước khi xoá.
  *
- * @param {string} userId     - UUID người dùng
- * @param {string} cartItemId - UUID của cart_items row
+ * @param {string} userId    - UUID người dùng
+ * @param {string} productId - UUID sản phẩm
  */
-export async function removeCartItem(userId, cartItemId) {
-  if (!userId || !cartItemId) {
+export async function removeCartItem(userId, productId) {
+  if (!userId || !productId) {
     throw new AppError('Thông tin không hợp lệ.', 400);
   }
 
@@ -232,8 +229,8 @@ export async function removeCartItem(userId, cartItemId) {
   const { data, error: deleteError } = await supabaseAdmin
     .from('cart_items')
     .delete()
-    .eq('id', cartItemId)
     .eq('user_id', userId)
+    .eq('product_id', productId)
     .select('id');
 
   if (deleteError) {
@@ -242,7 +239,7 @@ export async function removeCartItem(userId, cartItemId) {
   }
 
   if (!data || data.length === 0) {
-    throw new AppError('Mục giỏ hàng không tồn tại hoặc bạn không có quyền xoá.', 404);
+    throw new AppError('Sản phẩm không tồn tại trong giỏ hàng của bạn.', 404);
   }
 }
 
@@ -264,5 +261,30 @@ export async function clearCart(userId) {
   if (error) {
     console.error('[cart.service] Lỗi xoá giỏ hàng:', error.message);
     throw new AppError('Không thể xoá giỏ hàng. Vui lòng thử lại.', 500);
+  }
+}
+
+/**
+ * Đồng bộ giỏ hàng bulk từ local/guest.
+ *
+ * @param {string} userId - UUID người dùng
+ * @param {Array}  items  - Mảng các sản phẩm [{ productId, quantity }]
+ */
+export async function bulkSyncCart(userId, items) {
+  if (!userId) {
+    throw new AppError('ID người dùng không hợp lệ.', 400);
+  }
+  if (!Array.isArray(items)) {
+    throw new AppError('Dữ liệu đồng bộ phải là một mảng.', 400);
+  }
+
+  const { error } = await supabaseAdmin.rpc('sync_cart_bulk', {
+    p_user_id: userId,
+    p_items: items
+  });
+
+  if (error) {
+    console.error('[cart.service] Lỗi đồng bộ giỏ hàng bulk:', error.message);
+    throw new AppError('Không thể đồng bộ giỏ hàng với máy chủ.', 500);
   }
 }

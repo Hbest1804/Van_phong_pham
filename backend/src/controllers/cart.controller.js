@@ -46,17 +46,17 @@ export async function addToCart(req, res, next) {
 }
 
 /**
- * PUT /api/v1/cart/:cartItemId
+ * PUT /api/v1/cart/:productId
  * Cập nhật số lượng sản phẩm trong giỏ hàng.
  * Body: { quantity: number }
  */
 export async function updateCartItem(req, res, next) {
   try {
     const userId = req.user.id;
-    const { cartItemId } = req.params;
+    const { productId } = req.params;
     const { quantity } = req.body;
 
-    const result = await cartService.updateCartItem(userId, cartItemId, quantity);
+    const result = await cartService.updateCartItem(userId, productId, quantity);
 
     return successResponse(res, {
       statusCode: 200,
@@ -69,15 +69,15 @@ export async function updateCartItem(req, res, next) {
 }
 
 /**
- * DELETE /api/v1/cart/:cartItemId
+ * DELETE /api/v1/cart/:productId
  * Xoá một sản phẩm khỏi giỏ hàng.
  */
 export async function removeCartItem(req, res, next) {
   try {
     const userId = req.user.id;
-    const { cartItemId } = req.params;
+    const { productId } = req.params;
 
-    await cartService.removeCartItem(userId, cartItemId);
+    await cartService.removeCartItem(userId, productId);
 
     return successResponse(res, {
       statusCode: 200,
@@ -101,6 +101,27 @@ export async function clearCart(req, res, next) {
     return successResponse(res, {
       statusCode: 200,
       message: 'Đã xoá toàn bộ giỏ hàng.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * POST /api/v1/cart/bulk-sync
+ * Đồng bộ giỏ hàng guest lên server khi login.
+ * Body: { items: [{ productId: string, quantity: number }] }
+ */
+export async function bulkSync(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { items } = req.body;
+
+    await cartService.bulkSyncCart(userId, items || []);
+
+    return successResponse(res, {
+      statusCode: 200,
+      message: 'Đồng bộ giỏ hàng thành công!',
     });
   } catch (err) {
     next(err);

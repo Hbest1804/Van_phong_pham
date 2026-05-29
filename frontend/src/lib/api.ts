@@ -318,21 +318,21 @@ export const cartApi = {
     }),
 
   /**
-   * PUT /api/v1/cart/:cartItemId
+   * PUT /api/v1/cart/:productId
    * Cập nhật số lượng sản phẩm trong giỏ hàng.
    */
-  updateCartItem: (cartItemId: string, quantity: number) =>
-    request<{ cartItemId: string; productId: string; quantity: number }>(`/cart/${cartItemId}`, {
+  updateCartItem: (productId: string, quantity: number) =>
+    request<{ cartItemId: string; productId: string; quantity: number }>(`/cart/${productId}`, {
       method: 'PUT',
       body: JSON.stringify({ quantity }),
     }),
 
   /**
-   * DELETE /api/v1/cart/:cartItemId
+   * DELETE /api/v1/cart/:productId
    * Xoá một sản phẩm khỏi giỏ hàng.
    */
-  removeFromCart: (cartItemId: string) =>
-    request<void>(`/cart/${cartItemId}`, {
+  removeFromCart: (productId: string) =>
+    request<void>(`/cart/${productId}`, {
       method: 'DELETE',
     }),
 
@@ -343,5 +343,15 @@ export const cartApi = {
   clearCart: () =>
     request<void>('/cart', {
       method: 'DELETE',
+    }),
+
+  /**
+   * POST /api/v1/cart/bulk-sync
+   * Đồng bộ giỏ hàng bulk khi người dùng đăng nhập.
+   */
+  bulkSyncCart: (items: { productId: string; quantity: number }[]) =>
+    request<void>('/cart/bulk-sync', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
     }),
 };
