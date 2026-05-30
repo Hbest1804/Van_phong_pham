@@ -396,9 +396,17 @@ DECLARE
   v_stock INT;
   v_is_active BOOLEAN;
   v_cart_item_id UUID;
+  v_product_id UUID;      -- biến tạm tránh ambiguous với output column
+  v_quantity INT;         -- biến tạm tránh ambiguous với output column
   v_existing_quantity INT;
   v_message TEXT;
 BEGIN
+  -- 0. Khoá cart_items TRƯỚC để giữ thứ tự khoá nhất quán với create_order_transaction
+  --    (cart_items → products), tránh deadlock khi checkout và add-to-cart chạy song song.
+  PERFORM 1 FROM cart_items
+  WHERE user_id = p_user_id AND cart_items.product_id = p_product_id
+  FOR UPDATE;
+
   -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
   SELECT stock, is_active INTO v_stock, v_is_active
   FROM products
@@ -419,16 +427,18 @@ BEGIN
   WHERE user_id = p_user_id AND cart_items.product_id = p_product_id;
 
   -- 3. Thực hiện insert hoặc update atomically
+  --    Dùng v_product_id / v_quantity để tránh "column reference is ambiguous"
   INSERT INTO cart_items (user_id, product_id, quantity)
   VALUES (p_user_id, p_product_id, p_quantity)
   ON CONFLICT (user_id, product_id)
-  DO UPDATE SET 
-    quantity = cart_items.quantity + EXCLUDED.quantity,
+  DO UPDATE SET
+    quantity   = cart_items.quantity + EXCLUDED.quantity,
     updated_at = NOW()
-  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity INTO v_cart_item_id, product_id, quantity;
+  RETURNING cart_items.id, cart_items.product_id, cart_items.quantity
+       INTO v_cart_item_id,  v_product_id,          v_quantity;
 
   -- 4. Kiểm tra số lượng sau khi cập nhật để tránh race condition vượt quá tồn kho
-  IF quantity > v_stock THEN
+  IF v_quantity > v_stock THEN
     RAISE EXCEPTION 'Số lượng vượt quá tồn kho. Hiện còn % sản phẩm.', v_stock USING ERRCODE = 'P0003';
   END IF;
 
@@ -439,9 +449,12 @@ BEGIN
     v_message := 'Đã thêm sản phẩm vào giỏ hàng.';
   END IF;
 
-  id := v_cart_item_id;
-  message := v_message;
-  
+  -- Gán giá trị vào các output column của RETURNS TABLE
+  id         := v_cart_item_id;
+  product_id := v_product_id;
+  quantity   := v_quantity;
+  message    := v_message;
+
   RETURN NEXT;
 END;
 $$ LANGUAGE plpgsql;
@@ -475,5 +488,112 @@ BEGIN
       SELECT stock FROM products WHERE id = EXCLUDED.product_id
     )),
     updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 17. HÀM DATABASE: create_order_transaction
+--     Tạo đơn hàng từ giỏ hàng một cách hoàn toàn nguyên tử (atomic).
+--     Toàn bộ các bước: validate → INSERT orders → INSERT order_items
+--     (trigger giảm tồn kho) → DELETE cart_items đều nằm trong một
+--     transaction duy nhất — đảm bảo tính toàn vẹn dữ liệu.
+--
+--     Error codes:
+--       P0001 — Giỏ hàng trống
+--       P0002 — Sản phẩm ngừng kinh doanh
+--       P0003 — Vượt quá tồn kho
+-- ============================================================
+CREATE OR REPLACE FUNCTION create_order_transaction(
+  p_user_id        UUID,
+  p_address        TEXT,
+  p_payment_method TEXT,
+  p_note           TEXT DEFAULT NULL
+)
+RETURNS UUID AS $$
+DECLARE
+  v_order_id UUID;
+  v_total    NUMERIC := 0;
+  v_item     RECORD;
+BEGIN
+  -- 1. Khoá toàn bộ cart_items của user ngay từ đầu (FOR UPDATE):
+  --    - Serialize concurrent checkouts: request thứ 2 phải chờ request 1 commit/rollback.
+  --    - NOT FOUND sau PERFORM = giỏ hàng thực sự rỗng → báo lỗi P0001.
+  PERFORM 1 FROM cart_items WHERE user_id = p_user_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Giỏ hàng trống. Vui lòng thêm sản phẩm trước khi đặt hàng.'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  -- 2. Tạo đơn hàng trước với total = 0 (placeholder).
+  --    Total thực sự sẽ được cập nhật ở bước 5 sau khi validate xong.
+  --    Làm vậy để bước 3 (INSERT order_items) có v_order_id hợp lệ.
+  INSERT INTO orders (user_id, status, total, address, payment_method, note)
+  VALUES (
+    p_user_id,
+    'pending',
+    0,
+    p_address,
+    p_payment_method::payment_method,
+    p_note
+  )
+  RETURNING orders.id INTO v_order_id;
+
+  -- 3. Validate từng sản phẩm, tích luỹ tổng tiền VÀ chèn order_item trong cùng một vòng lặp.
+  --    → Đảm bảo mọi order_item được chèn đều đã qua validate: không có cửa sổ thời gian
+  --      cho cart_item mới (chưa validate) lọt vào qua một INSERT...SELECT riêng biệt.
+  --
+  --    FOR UPDATE OF p: khoá các dòng products trong suốt transaction.
+  --    ORDER BY p.id: thứ tự khoá xác định → loại bỏ deadlock khi nhiều user cùng checkout.
+  FOR v_item IN
+    SELECT
+      ci.quantity,
+      p.id        AS product_id,
+      p.name      AS product_name,
+      p.price,
+      p.stock,
+      p.is_active
+    FROM cart_items ci
+    JOIN products p ON p.id = ci.product_id
+    WHERE ci.user_id = p_user_id
+    ORDER BY p.id          -- deterministic lock order → no deadlock
+    FOR UPDATE OF p
+  LOOP
+    -- 3a. Kiểm tra trạng thái sản phẩm
+    IF NOT v_item.is_active THEN
+      RAISE EXCEPTION 'Sản phẩm "%" đã ngừng kinh doanh.', v_item.product_name
+        USING ERRCODE = 'P0002';
+    END IF;
+
+    -- 3b. Kiểm tra tồn kho
+    IF v_item.quantity > v_item.stock THEN
+      RAISE EXCEPTION 'Sản phẩm "%" không đủ tồn kho. Hiện còn % sản phẩm.',
+        v_item.product_name, v_item.stock
+        USING ERRCODE = 'P0003';
+    END IF;
+
+    -- 3c. Tích luỹ tổng tiền
+    v_total := v_total + v_item.price * v_item.quantity;
+
+    -- 3d. Chèn order_item ngay trong vòng lặp — trigger trg_order_items_decrease_stock
+    --     sẽ tự giảm tồn kho sau mỗi INSERT.
+    INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
+    VALUES (v_order_id, v_item.product_id, v_item.product_name, v_item.quantity, v_item.price);
+  END LOOP;
+
+  -- 4. Cập nhật total thực tế vào đơn hàng (thay cho placeholder 0 ở bước 2).
+  UPDATE orders SET total = v_total WHERE id = v_order_id;
+
+  -- 5. Xoá chỉ các sản phẩm đã đặt khỏi giỏ hàng
+  --    (tránh xoá nhầm sản phẩm mới thêm song song ở tab khác)
+  DELETE FROM cart_items
+  WHERE user_id = p_user_id
+    AND product_id IN (
+      SELECT product_id
+      FROM order_items
+      WHERE order_id = v_order_id
+    );
+
+  RETURN v_order_id;
 END;
 $$ LANGUAGE plpgsql;

@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { useStore } from '../contexts/StoreContext';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { Card, CardContent } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
 import { formatCurrency } from '../lib/utils';
-import { Order, PaymentMethod } from '../types';
+import { PaymentMethod } from '../types';
+import { ordersApi } from '../lib/api';
 import { motion } from 'motion/react';
 
 export function Checkout() {
   const { user } = useAuth();
   const { items, total, clearCart } = useCart();
-  const { addOrder } = useStore();
   const navigate = useNavigate();
 
   const [address, setAddress] = useState(user?.address || '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
+  const [note, setNote] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -28,33 +30,41 @@ export function Checkout() {
     return <Navigate to="/cart" replace />;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!address) {
-      alert('Vui lòng nhập địa chỉ giao hàng');
+    if (isLoading) return;   // chặn double-submit (double-click / Enter liên tục)
+    setError('');
+
+    if (!address.trim()) {
+      setError('Vui lòng nhập địa chỉ giao hàng.');
       return;
     }
 
-    const order: Order = {
-      id: Math.random().toString(36).substr(2, 9),
-      userId: user.id,
-      items: items.map(i => ({
-        productId: i.product.id,
-        name: i.product.name,
-        price: i.product.price,
-        quantity: i.quantity
-      })),
-      total,
-      address,
-      paymentMethod,
-      status: 'pending',
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
+    setIsLoading(true);
+    try {
+      const res = await ordersApi.createOrder({
+        address: address.trim(),
+        paymentMethod,
+        note: note.trim() || undefined,
+      });
 
-    addOrder(order);
-    clearCart();
-    setIsSuccess(true);
+      if (res.success) {
+        try {
+          await clearCart();
+        } catch (cartErr) {
+          // Đơn hàng đã tạo thành công trên server — lỗi xoá giỏ hàng local
+          // không được ngăn người dùng thấy màn hình thành công.
+          console.error('[Checkout] clearCart failed (order still created):', cartErr);
+        }
+        setIsSuccess(true);
+      } else {
+        setError(res.message || 'Đặt hàng thất bại. Vui lòng thử lại.');
+      }
+    } catch {
+      setError('Lỗi kết nối. Vui lòng thử lại.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isSuccess) {
@@ -98,7 +108,22 @@ export function Checkout() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-bold text-slate-700">Địa chỉ giao hàng *</label>
-                <Input required value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Nhập địa chỉ đầy đủ" className="focus-visible:ring-violet-500" />
+                <Input
+                  required
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Nhập địa chỉ đầy đủ"
+                  className="focus-visible:ring-violet-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700">Ghi chú (tuỳ chọn)</label>
+                <Input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Ghi chú thêm cho đơn hàng..."
+                  className="focus-visible:ring-violet-500"
+                />
               </div>
               <div className="space-y-3 pt-2">
                 <label className="text-sm font-bold text-slate-700">Phương thức thanh toán</label>
@@ -113,10 +138,21 @@ export function Checkout() {
                   </label>
                 </div>
               </div>
+
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium rounded-xl px-4 py-3"
+                >
+                  {error}
+                </motion.div>
+              )}
             </form>
           </CardContent>
         </Card>
       </motion.div>
+
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5, delay: 0.1 }}>
         <h2 className="text-2xl font-extrabold mb-6 text-indigo-950">Tóm tắt đơn hàng</h2>
         <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-xl rounded-2xl overflow-hidden">
@@ -137,7 +173,23 @@ export function Checkout() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 font-mono">{formatCurrency(total)}</span>
             </div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="mt-8">
-              <Button type="submit" form="checkout-form" className="w-full rounded-xl py-6 text-lg font-bold shadow-lg shadow-indigo-200" size="lg">Hoàn tất đặt hàng</Button>
+              <Button
+                type="submit"
+                form="checkout-form"
+                disabled={isLoading}
+                className="w-full rounded-xl py-6 text-lg font-bold shadow-lg shadow-indigo-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                size="lg"
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                    </svg>
+                    Đang đặt hàng...
+                  </span>
+                ) : 'Hoàn tất đặt hàng'}
+              </Button>
             </motion.div>
           </CardContent>
         </Card>
