@@ -404,7 +404,7 @@ BEGIN
   -- 0. Khoá cart_items TRƯỚC để giữ thứ tự khoá nhất quán với create_order_transaction
   --    (cart_items → products), tránh deadlock khi checkout và add-to-cart chạy song song.
   PERFORM 1 FROM cart_items
-  WHERE user_id = p_user_id AND product_id = p_product_id
+  WHERE user_id = p_user_id AND cart_items.product_id = p_product_id
   FOR UPDATE;
 
   -- 1. Lấy thông tin sản phẩm và khóa dòng để tránh cập nhật đồng thời stock
