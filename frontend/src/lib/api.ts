@@ -445,3 +445,134 @@ export const ordersApi = {
       body: JSON.stringify({ status }),
     }),
 };
+
+// ── Statistics API (Admin only) ───────────────────────────────────────────────
+
+export interface StatsSummary {
+  totalRevenue: number;
+  totalOrders: number;
+  totalCustomers: number;
+  totalActiveProducts: number;
+}
+
+export interface StatsMonthMetric {
+  value: number;
+  /** % tăng trưởng so với tháng trước, null nếu tháng trước = 0 */
+  growth: number | null;
+}
+
+export interface StatsOrdersByStatus {
+  pending: number;
+  shipping: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface StatsTopProduct {
+  productId: string;
+  productName: string;
+  totalQuantity: number;
+  totalRevenue: number;
+}
+
+export interface DashboardOverviewData {
+  summary: StatsSummary;
+  currentMonth: {
+    revenue: StatsMonthMetric;
+    orders: StatsMonthMetric;
+  };
+  previousMonth: {
+    revenue: number;
+    orders: number;
+  };
+  ordersByStatus: StatsOrdersByStatus;
+  topProducts: StatsTopProduct[];
+}
+
+export interface RevenueDataPoint {
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface RevenueByPeriodData {
+  period: { from: string; to: string };
+  groupBy: 'month' | 'day';
+  data: RevenueDataPoint[];
+  summary: {
+    totalRevenue: number;
+    totalOrders: number;
+    dataPoints: number;
+  };
+}
+
+export interface TopProductItem {
+  rank: number;
+  productId: string;
+  productName: string;
+  unitPrice: number;
+  totalQuantity: number;
+  totalRevenue: number;
+}
+
+export interface TopProductsData {
+  period: { from: string | null; to: string | null };
+  sortBy: string;
+  limit: number;
+  products: TopProductItem[];
+  summary: {
+    totalProducts: number;
+    totalQuantitySold: number;
+    totalRevenue: number;
+  };
+}
+
+export interface GetRevenueParams {
+  from?: string;
+  to?: string;
+  groupBy?: 'month' | 'day';
+}
+
+export interface GetTopProductsParams {
+  limit?: number;
+  from?: string;
+  to?: string;
+  sortBy?: 'quantity' | 'revenue';
+}
+
+export const statisticsApi = {
+  /**
+   * GET /api/v1/admin/statistics/overview
+   * Lấy số liệu tổng quan cho dashboard Admin.
+   */
+  getOverview: () =>
+    request<DashboardOverviewData>('/admin/statistics/overview', { method: 'GET' }),
+
+  /**
+   * GET /api/v1/admin/statistics/revenue
+   * Lấy dữ liệu doanh thu theo khoảng thời gian.
+   */
+  getRevenue: (params: GetRevenueParams = {}) => {
+    const query = new URLSearchParams();
+    if (params.from)    query.append('from',    params.from);
+    if (params.to)      query.append('to',      params.to);
+    if (params.groupBy) query.append('groupBy', params.groupBy);
+    const qs = query.toString();
+    return request<RevenueByPeriodData>(`/admin/statistics/revenue${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+
+  /**
+   * GET /api/v1/admin/statistics/top-products
+   * Lấy danh sách sản phẩm có doanh số cao nhất.
+   */
+  getTopProducts: (params: GetTopProductsParams = {}) => {
+    const query = new URLSearchParams();
+    if (params.limit  != null) query.append('limit',  String(params.limit));
+    if (params.from)           query.append('from',   params.from);
+    if (params.to)             query.append('to',     params.to);
+    if (params.sortBy)         query.append('sortBy', params.sortBy);
+    const qs = query.toString();
+    return request<TopProductsData>(`/admin/statistics/top-products${qs ? `?${qs}` : ''}`, { method: 'GET' });
+  },
+};
+
