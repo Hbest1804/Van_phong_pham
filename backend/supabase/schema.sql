@@ -525,10 +525,26 @@ BEGIN
       USING ERRCODE = 'P0001';
   END IF;
 
-  -- 2. Validate từng sản phẩm và tính tổng tiền
+  -- 2. Tạo đơn hàng trước với total = 0 (placeholder).
+  --    Total thực sự sẽ được cập nhật ở bước 5 sau khi validate xong.
+  --    Làm vậy để bước 3 (INSERT order_items) có v_order_id hợp lệ.
+  INSERT INTO orders (user_id, status, total, address, payment_method, note)
+  VALUES (
+    p_user_id,
+    'pending',
+    0,
+    p_address,
+    p_payment_method::payment_method,
+    p_note
+  )
+  RETURNING orders.id INTO v_order_id;
+
+  -- 3. Validate từng sản phẩm, tích luỹ tổng tiền VÀ chèn order_item trong cùng một vòng lặp.
+  --    → Đảm bảo mọi order_item được chèn đều đã qua validate: không có cửa sổ thời gian
+  --      cho cart_item mới (chưa validate) lọt vào qua một INSERT...SELECT riêng biệt.
+  --
   --    FOR UPDATE OF p: khoá các dòng products trong suốt transaction.
-  --    ORDER BY p.id: đảm bảo thứ tự khoá NHẤT ĐỊNH giữa các transaction
-  --    → loại bỏ hoàn toàn nguy cơ deadlock khi nhiều user cùng mua chung sản phẩm.
+  --    ORDER BY p.id: thứ tự khoá xác định → loại bỏ deadlock khi nhiều user cùng checkout.
   FOR v_item IN
     SELECT
       ci.quantity,
@@ -543,43 +559,30 @@ BEGIN
     ORDER BY p.id          -- deterministic lock order → no deadlock
     FOR UPDATE OF p
   LOOP
+    -- 3a. Kiểm tra trạng thái sản phẩm
     IF NOT v_item.is_active THEN
       RAISE EXCEPTION 'Sản phẩm "%" đã ngừng kinh doanh.', v_item.product_name
         USING ERRCODE = 'P0002';
     END IF;
 
+    -- 3b. Kiểm tra tồn kho
     IF v_item.quantity > v_item.stock THEN
       RAISE EXCEPTION 'Sản phẩm "%" không đủ tồn kho. Hiện còn % sản phẩm.',
         v_item.product_name, v_item.stock
         USING ERRCODE = 'P0003';
     END IF;
 
+    -- 3c. Tích luỹ tổng tiền
     v_total := v_total + v_item.price * v_item.quantity;
+
+    -- 3d. Chèn order_item ngay trong vòng lặp — trigger trg_order_items_decrease_stock
+    --     sẽ tự giảm tồn kho sau mỗi INSERT.
+    INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
+    VALUES (v_order_id, v_item.product_id, v_item.product_name, v_item.quantity, v_item.price);
   END LOOP;
 
-  -- 3. Tạo đơn hàng
-  INSERT INTO orders (user_id, status, total, address, payment_method, note)
-  VALUES (
-    p_user_id,
-    'pending',
-    v_total,
-    p_address,
-    p_payment_method::payment_method,
-    p_note
-  )
-  RETURNING orders.id INTO v_order_id;
-
-  -- 4. Tạo order_items — trigger trg_order_items_decrease_stock sẽ tự giảm tồn kho
-  INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price)
-  SELECT
-    v_order_id,
-    p.id,
-    p.name,
-    ci.quantity,
-    p.price
-  FROM cart_items ci
-  JOIN products p ON p.id = ci.product_id
-  WHERE ci.user_id = p_user_id;
+  -- 4. Cập nhật total thực tế vào đơn hàng (thay cho placeholder 0 ở bước 2).
+  UPDATE orders SET total = v_total WHERE id = v_order_id;
 
   -- 5. Xoá chỉ các sản phẩm đã đặt khỏi giỏ hàng
   --    (tránh xoá nhầm sản phẩm mới thêm song song ở tab khác)
