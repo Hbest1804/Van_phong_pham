@@ -65,13 +65,13 @@ export async function getDashboardOverview() {
     totalOrdersResult,
     totalUsersResult,
     totalActiveProductsResult,
-    ordersByStatusResult,
+    pendingResult,
+    shippingResult,
+    completedResult,
+    cancelledResult,
   ] = await Promise.all([
-    // Tổng doanh thu từ đơn completed
-    supabaseAdmin
-      .from('orders')
-      .select('total')
-      .eq('status', 'completed'),
+    // Tổng doanh thu từ đơn completed (dùng RPC)
+    supabaseAdmin.rpc('get_revenue_sum'),
 
     // Tổng đơn hàng (tất cả trạng thái)
     supabaseAdmin
@@ -93,7 +93,20 @@ export async function getDashboardOverview() {
     // Phân bổ đơn theo trạng thái
     supabaseAdmin
       .from('orders')
-      .select('status'),
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending'),
+    supabaseAdmin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'shipping'),
+    supabaseAdmin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'completed'),
+    supabaseAdmin
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'cancelled'),
   ]);
 
   // Kiểm tra lỗi DB
@@ -102,7 +115,10 @@ export async function getDashboardOverview() {
     totalOrdersResult.error,
     totalUsersResult.error,
     totalActiveProductsResult.error,
-    ordersByStatusResult.error,
+    pendingResult.error,
+    shippingResult.error,
+    completedResult.error,
+    cancelledResult.error,
   ].filter(Boolean);
 
   if (dbErrors.length > 0) {
@@ -110,29 +126,26 @@ export async function getDashboardOverview() {
     throw new AppError('Không thể lấy dữ liệu tổng quan. Vui lòng thử lại.', 500);
   }
 
-  // Tính tổng doanh thu
-  const totalRevenue = (totalRevenueResult.data || []).reduce(
-    (sum, row) => sum + Number(row.total),
-    0
-  );
+  // Tổng doanh thu
+  const totalRevenue = totalRevenueResult.data ?? 0;
 
   // Phân bổ đơn theo trạng thái
-  const statusCounts = { pending: 0, shipping: 0, completed: 0, cancelled: 0 };
-  for (const row of (ordersByStatusResult.data || [])) {
-    if (row.status in statusCounts) statusCounts[row.status]++;
-  }
+  const statusCounts = {
+    pending: pendingResult.count ?? 0,
+    shipping: shippingResult.count ?? 0,
+    completed: completedResult.count ?? 0,
+    cancelled: cancelledResult.count ?? 0,
+  };
 
   // ── 2. Thống kê tháng hiện tại ───────────────────────────────────────────
 
   const [currRevenueResult, currOrdersResult, prevRevenueResult, prevOrdersResult] =
     await Promise.all([
-      // Doanh thu tháng này (completed)
-      supabaseAdmin
-        .from('orders')
-        .select('total')
-        .eq('status', 'completed')
-        .gte('created_at', currMonth.start)
-        .lt('created_at', currMonth.end),
+      // Doanh thu tháng này (completed) - dùng RPC
+      supabaseAdmin.rpc('get_revenue_sum', {
+        p_start_date: currMonth.start,
+        p_end_date: currMonth.end
+      }),
 
       // Số đơn tháng này
       supabaseAdmin
@@ -141,13 +154,11 @@ export async function getDashboardOverview() {
         .gte('created_at', currMonth.start)
         .lt('created_at', currMonth.end),
 
-      // Doanh thu tháng trước (completed)
-      supabaseAdmin
-        .from('orders')
-        .select('total')
-        .eq('status', 'completed')
-        .gte('created_at', prevMonth.start)
-        .lt('created_at', prevMonth.end),
+      // Doanh thu tháng trước (completed) - dùng RPC
+      supabaseAdmin.rpc('get_revenue_sum', {
+        p_start_date: prevMonth.start,
+        p_end_date: prevMonth.end
+      }),
 
       // Số đơn tháng trước
       supabaseAdmin
@@ -169,53 +180,30 @@ export async function getDashboardOverview() {
     throw new AppError('Không thể lấy dữ liệu theo tháng. Vui lòng thử lại.', 500);
   }
 
-  const currentMonthRevenue  = (currRevenueResult.data || []).reduce((s, r) => s + Number(r.total), 0);
-  const previousMonthRevenue = (prevRevenueResult.data || []).reduce((s, r) => s + Number(r.total), 0);
+  const currentMonthRevenue  = currRevenueResult.data ?? 0;
+  const previousMonthRevenue = prevRevenueResult.data ?? 0;
   const currentMonthOrders   = currOrdersResult.count  ?? 0;
   const previousMonthOrders  = prevOrdersResult.count  ?? 0;
 
   // ── 3. Top 5 sản phẩm bán chạy ──────────────────────────────────────────
 
   const { data: topProductsRaw, error: topProductsError } = await supabaseAdmin
-    .from('order_items')
-    .select(`
-      product_id,
-      product_name,
-      quantity,
-      unit_price,
-      orders!inner ( status )
-    `)
-    .eq('orders.status', 'completed');
+    .rpc('get_top_products', {
+      p_limit_num: 5,
+      p_sort_by: 'quantity'
+    });
 
   if (topProductsError) {
     console.error('[statistics.service] Lỗi lấy top sản phẩm:', topProductsError.message);
     throw new AppError('Không thể lấy top sản phẩm bán chạy. Vui lòng thử lại.', 500);
   }
 
-  // Gom nhóm theo product_id
-  const productMap = new Map();
-  for (const item of (topProductsRaw || [])) {
-    const key = item.product_id;
-    if (!productMap.has(key)) {
-      productMap.set(key, {
-        productId:   item.product_id,
-        productName: item.product_name,
-        totalQuantity: 0,
-        totalRevenue:  0,
-      });
-    }
-    const entry = productMap.get(key);
-    entry.totalQuantity += item.quantity;
-    entry.totalRevenue  += Number(item.unit_price) * item.quantity;
-  }
-
-  const topProducts = [...productMap.values()]
-    .sort((a, b) => b.totalQuantity - a.totalQuantity)
-    .slice(0, 5)
-    .map(p => ({
-      ...p,
-      totalRevenue: Math.round(p.totalRevenue * 100) / 100,
-    }));
+  const topProducts = (topProductsRaw || []).map(p => ({
+    productId:     p.product_id,
+    productName:   p.product_name,
+    totalQuantity: Number(p.total_quantity),
+    totalRevenue:  Math.round(Number(p.total_revenue) * 100) / 100,
+  }));
 
   // ── 4. Tổng hợp kết quả trả về ───────────────────────────────────────────
 
@@ -300,35 +288,22 @@ export async function getRevenueByPeriod(queryParams = {}) {
     throw new AppError("'from' phải nhỏ hơn 'to'.", 400);
   }
 
-  // Lấy tất cả đơn completed trong khoảng thời gian
-  const { data: orders, error } = await supabaseAdmin
-    .from('orders')
-    .select('total, created_at')
-    .eq('status', 'completed')
-    .gte('created_at', startDate.toISOString())
-    .lte('created_at', endDate.toISOString())
-    .order('created_at', { ascending: true });
+  // Lấy thống kê doanh thu và đơn hàng đã gom nhóm từ database (dùng RPC)
+  const { data: statsRaw, error: statsError } = await supabaseAdmin
+    .rpc('get_revenue_stats', {
+      p_from_date: startDate.toISOString(),
+      p_to_date:   endDate.toISOString(),
+      p_group_by:  groupBy,
+    });
 
-  if (error) {
-    console.error('[statistics.service] Lỗi lấy doanh thu theo khoảng:', error.message);
+  if (statsError) {
+    console.error('[statistics.service] Lỗi lấy doanh thu theo khoảng:', statsError.message);
     throw new AppError('Không thể lấy dữ liệu doanh thu. Vui lòng thử lại.', 500);
   }
 
-  // Lấy số đơn hàng (mọi trạng thái) trong khoảng
-  const { data: allOrders, error: allOrdersError } = await supabaseAdmin
-    .from('orders')
-    .select('created_at')
-    .gte('created_at', startDate.toISOString())
-    .lte('created_at', endDate.toISOString());
-
-  if (allOrdersError) {
-    console.error('[statistics.service] Lỗi lấy số đơn hàng:', allOrdersError.message);
-    throw new AppError('Không thể lấy dữ liệu đơn hàng. Vui lòng thử lại.', 500);
-  }
-
   // Gom nhóm theo ngày / tháng
-  const revenueMap = new Map();  // label → { revenue, orders }
-  const ordersMap  = new Map();
+  const revenueMap = new Map();  // label → revenue
+  const ordersMap  = new Map();  // label → orders count
 
   const getLabel = (isoString) => {
     const d = new Date(isoString);
@@ -340,16 +315,9 @@ export async function getRevenueByPeriod(queryParams = {}) {
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
   };
 
-  for (const order of (orders || [])) {
-    const label = getLabel(order.created_at);
-    if (!revenueMap.has(label)) revenueMap.set(label, 0);
-    revenueMap.set(label, revenueMap.get(label) + Number(order.total));
-  }
-
-  for (const order of (allOrders || [])) {
-    const label = getLabel(order.created_at);
-    if (!ordersMap.has(label)) ordersMap.set(label, 0);
-    ordersMap.set(label, ordersMap.get(label) + 1);
+  for (const row of (statsRaw || [])) {
+    revenueMap.set(row.label, Number(row.revenue));
+    ordersMap.set(row.label, Number(row.orders));
   }
 
   // Sinh đủ tất cả các nhãn trong khoảng (dù không có đơn → 0)
@@ -443,66 +411,41 @@ export async function getTopProducts(queryParams = {}) {
     throw new AppError("'from' phải nhỏ hơn 'to'.", 400);
   }
 
-  // Lấy order_items từ đơn completed trong khoảng thời gian
-  let query = supabaseAdmin
-    .from('order_items')
-    .select(`
-      product_id,
-      product_name,
-      quantity,
-      unit_price,
-      orders!inner ( status, created_at )
-    `)
-    .eq('orders.status', 'completed');
+  // Lấy top sản phẩm bán chạy VÀ tổng hợp số liệu toàn bộ (dùng RPC song song)
+  const [itemsResult, summaryResult] = await Promise.all([
+    supabaseAdmin.rpc('get_top_products', {
+      p_from_date: startDate ? startDate.toISOString() : null,
+      p_to_date:   endDate   ? endDate.toISOString()   : null,
+      p_sort_by:   sortBy,
+      p_limit_num: parsedLimit
+    }),
+    supabaseAdmin.rpc('get_top_products_summary', {
+      p_from_date: startDate ? startDate.toISOString() : null,
+      p_to_date:   endDate   ? endDate.toISOString()   : null
+    })
+  ]);
 
-  if (startDate) query = query.gte('orders.created_at', startDate.toISOString());
-  if (endDate)   query = query.lte('orders.created_at', endDate.toISOString());
-
-  const { data: items, error } = await query;
-
-  if (error) {
-    console.error('[statistics.service] Lỗi lấy top sản phẩm:', error.message);
+  if (itemsResult.error) {
+    console.error('[statistics.service] Lỗi lấy top sản phẩm:', itemsResult.error.message);
     throw new AppError('Không thể lấy dữ liệu sản phẩm bán chạy. Vui lòng thử lại.', 500);
   }
 
-  // Gom nhóm theo product_id
-  const productMap = new Map();
-  for (const item of (items || [])) {
-    const key = item.product_id;
-    if (!productMap.has(key)) {
-      productMap.set(key, {
-        productId:     item.product_id,
-        productName:   item.product_name,
-        totalQuantity: 0,
-        totalRevenue:  0,
-        unitPrice:     Number(item.unit_price),
-      });
-    }
-    const entry = productMap.get(key);
-    entry.totalQuantity += item.quantity;
-    entry.totalRevenue  += Number(item.unit_price) * item.quantity;
+  if (summaryResult.error) {
+    console.error('[statistics.service] Lỗi lấy tổng hợp top sản phẩm:', summaryResult.error.message);
+    throw new AppError('Không thể lấy dữ liệu sản phẩm bán chạy. Vui lòng thử lại.', 500);
   }
 
-  // Sắp xếp theo tiêu chí được chọn
-  const sorted = [...productMap.values()]
-    .sort((a, b) =>
-      sortBy === 'revenue'
-        ? b.totalRevenue - a.totalRevenue
-        : b.totalQuantity - a.totalQuantity
-    )
-    .slice(0, parsedLimit)
-    .map((p, index) => ({
-      rank:          index + 1,
-      productId:     p.productId,
-      productName:   p.productName,
-      unitPrice:     Math.round(p.unitPrice * 100) / 100,
-      totalQuantity: p.totalQuantity,
-      totalRevenue:  Math.round(p.totalRevenue * 100) / 100,
-    }));
+  const itemsRaw = itemsResult.data || [];
+  const summaryRaw = summaryResult.data?.[0] || { total_products: 0, total_quantity_sold: 0, total_revenue: 0 };
 
-  // Tổng hợp summary
-  const allRevenue  = [...productMap.values()].reduce((s, p) => s + p.totalRevenue, 0);
-  const allQuantity = [...productMap.values()].reduce((s, p) => s + p.totalQuantity, 0);
+  const sorted = itemsRaw.map((p, index) => ({
+    rank:          index + 1,
+    productId:     p.product_id,
+    productName:   p.product_name,
+    unitPrice:     Math.round(Number(p.unit_price) * 100) / 100,
+    totalQuantity: Number(p.total_quantity),
+    totalRevenue:  Math.round(Number(p.total_revenue) * 100) / 100,
+  }));
 
   return {
     period: {
@@ -513,9 +456,9 @@ export async function getTopProducts(queryParams = {}) {
     limit: parsedLimit,
     products: sorted,
     summary: {
-      totalProducts:       productMap.size,
-      totalQuantitySold:   allQuantity,
-      totalRevenue:        Math.round(allRevenue * 100) / 100,
+      totalProducts:       Number(summaryRaw.total_products),
+      totalQuantitySold:   Number(summaryRaw.total_quantity_sold),
+      totalRevenue:        Math.round(Number(summaryRaw.total_revenue) * 100) / 100,
     },
   };
 }

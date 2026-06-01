@@ -597,3 +597,134 @@ BEGIN
   RETURN v_order_id;
 END;
 $$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 18. HÀM DATABASE: get_revenue_sum
+--     Tính tổng doanh thu từ đơn hàng completed trong khoảng thời gian.
+--     Bypass giới hạn 1000 dòng của PostgREST.
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_revenue_sum(
+  p_start_date TIMESTAMPTZ DEFAULT NULL,
+  p_end_date TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS NUMERIC AS $$
+DECLARE
+  v_sum NUMERIC;
+BEGIN
+  SELECT COALESCE(SUM(total), 0) INTO v_sum
+  FROM orders
+  WHERE status = 'completed'
+    AND (p_start_date IS NULL OR created_at >= p_start_date)
+    AND (p_end_date IS NULL OR created_at < p_end_date);
+  RETURN v_sum;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- 19. HÀM DATABASE: get_top_products
+--     Lấy danh sách sản phẩm bán chạy nhất trong khoảng thời gian.
+--     Bypass giới hạn 1000 dòng của PostgREST.
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_top_products(
+  p_from_date TIMESTAMPTZ DEFAULT NULL,
+  p_to_date TIMESTAMPTZ DEFAULT NULL,
+  p_sort_by TEXT DEFAULT 'quantity',
+  p_limit_num INT DEFAULT 10
+)
+RETURNS TABLE (
+  product_id UUID,
+  product_name VARCHAR,
+  total_quantity BIGINT,
+  total_revenue NUMERIC,
+  unit_price NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    oi.product_id,
+    oi.product_name,
+    SUM(oi.quantity)::BIGINT AS total_quantity,
+    SUM(oi.quantity * oi.unit_price)::NUMERIC AS total_revenue,
+    MAX(oi.unit_price)::NUMERIC AS unit_price
+  FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE o.status = 'completed'
+    AND (p_from_date IS NULL OR o.created_at >= p_from_date)
+    AND (p_to_date IS NULL OR o.created_at <= p_to_date)
+  GROUP BY oi.product_id, oi.product_name
+  ORDER BY 
+    CASE WHEN p_sort_by = 'revenue' THEN SUM(oi.quantity * oi.unit_price) ELSE NULL END DESC,
+    CASE WHEN p_sort_by = 'quantity' THEN SUM(oi.quantity) ELSE NULL END DESC
+  LIMIT p_limit_num;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- 20. HÀM DATABASE: get_top_products_summary
+--     Tổng hợp số liệu sản phẩm bán chạy toàn bộ trong khoảng thời gian.
+--     Bypass giới hạn 1000 dòng của PostgREST.
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_top_products_summary(
+  p_from_date TIMESTAMPTZ DEFAULT NULL,
+  p_to_date TIMESTAMPTZ DEFAULT NULL
+)
+RETURNS TABLE (
+  total_products BIGINT,
+  total_quantity_sold BIGINT,
+  total_revenue NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    COUNT(DISTINCT oi.product_id)::BIGINT AS total_products,
+    COALESCE(SUM(oi.quantity), 0)::BIGINT AS total_quantity_sold,
+    COALESCE(SUM(oi.quantity * oi.unit_price), 0)::NUMERIC AS total_revenue
+  FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE o.status = 'completed'
+    AND (p_from_date IS NULL OR o.created_at >= p_from_date)
+    AND (p_to_date IS NULL OR o.created_at <= p_to_date);
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================
+-- 21. HÀM DATABASE: get_revenue_stats
+--     Thống kê doanh thu và đơn hàng theo ngày hoặc tháng.
+--     Bypass giới hạn 1000 dòng của PostgREST.
+-- ============================================================
+CREATE OR REPLACE FUNCTION get_revenue_stats(
+  p_from_date TIMESTAMPTZ,
+  p_to_date TIMESTAMPTZ,
+  p_group_by TEXT
+)
+RETURNS TABLE (
+  label TEXT,
+  revenue NUMERIC,
+  orders BIGINT
+) AS $$
+BEGIN
+  IF p_group_by = 'day' THEN
+    RETURN QUERY
+    SELECT 
+      to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS label,
+      COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END), 0)::NUMERIC AS revenue,
+      COUNT(o.id)::BIGINT AS orders
+    FROM orders o
+    WHERE o.created_at >= p_from_date AND o.created_at <= p_to_date
+    GROUP BY 1
+    ORDER BY 1 ASC;
+  ELSE
+    RETURN QUERY
+    SELECT 
+      to_char(o.created_at AT TIME ZONE 'UTC', 'YYYY-MM') AS label,
+      COALESCE(SUM(CASE WHEN o.status = 'completed' THEN o.total ELSE 0 END), 0)::NUMERIC AS revenue,
+      COUNT(o.id)::BIGINT AS orders
+    FROM orders o
+    WHERE o.created_at >= p_from_date AND o.created_at <= p_to_date
+    GROUP BY 1
+    ORDER BY 1 ASC;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
