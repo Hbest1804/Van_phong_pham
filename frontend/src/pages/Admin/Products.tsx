@@ -141,7 +141,13 @@ export function Products() {
       </div>
 
       {(isAdding || isEditing) && (
-        <div className="bg-white p-6 rounded-lg border shadow-sm">
+        <form 
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }} 
+          className="bg-white p-6 rounded-lg border shadow-sm"
+        >
           <h2 className="text-lg font-bold mb-4">{isEditing ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h2>
 
           {/* Feedback messages */}
@@ -160,13 +166,18 @@ export function Products() {
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="text-sm font-medium">Tên SP</label>
-              <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+              <label className="text-sm font-medium">Tên SP *</label>
+              <Input 
+                required 
+                value={formData.name} 
+                onChange={e => setFormData({ ...formData, name: e.target.value })} 
+              />
             </div>
             <div>
-              <label className="text-sm font-medium">Danh mục</label>
+              <label className="text-sm font-medium">Danh mục *</label>
               <select
                 id="product-category-select"
+                required
                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950"
                 value={formData.categoryId}
                 onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
@@ -176,9 +187,10 @@ export function Products() {
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium">Giá (VND)</label>
+              <label className="text-sm font-medium">Giá (VND) *</label>
               <Input
                 type="number"
+                required
                 min={0}
                 value={formData.price}
                 onChange={e => {
@@ -188,9 +200,10 @@ export function Products() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Tồn kho</label>
+              <label className="text-sm font-medium">Tồn kho *</label>
               <Input
                 type="number"
+                required
                 min={0}
                 value={formData.stock}
                 onChange={e => {
@@ -261,14 +274,14 @@ export function Products() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={handleCancel} disabled={submitting}>Hủy</Button>
-            <Button onClick={handleSave} disabled={submitting}>
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={submitting}>Hủy</Button>
+            <Button type="submit" disabled={submitting}>
               {submitting ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang lưu...</>
               ) : 'Lưu'}
             </Button>
           </div>
-        </div>
+        </form>
       )}
 
       <div className="bg-white border rounded-lg overflow-hidden">
