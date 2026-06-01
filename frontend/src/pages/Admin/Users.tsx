@@ -19,35 +19,43 @@ export function Users() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [searchInput, setSearchInput] = useState('');
-
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await adminUsersApi.getUsers({
-        page,
-        limit: 10,
-        search: search || undefined,
-        status: filterStatus || undefined,
-      });
-      if (res.success && res.data) {
-        setUsers(res.data.users);
-        setTotalPages(res.data.pagination.totalPages);
-        setTotal(res.data.pagination.total);
-      } else {
-        setError(res.message || 'Không thể tải danh sách khách hàng.');
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Lỗi kết nối. Vui lòng thử lại.');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, filterStatus]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    const fetchUsers = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await adminUsersApi.getUsers({
+          page,
+          limit: 10,
+          search: search || undefined,
+          status: filterStatus || undefined,
+        });
+        if (!active) return;
+        if (res.success && res.data) {
+          setUsers(res.data.users);
+          setTotalPages(res.data.pagination.totalPages);
+          setTotal(res.data.pagination.total);
+        } else {
+          setError(res.message || 'Không thể tải danh sách khách hàng.');
+        }
+      } catch (err) {
+        if (!active) return;
+        console.error(err);
+        setError('Lỗi kết nối. Vui lòng thử lại.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
     fetchUsers();
-  }, [fetchUsers]);
+    return () => {
+      active = false;
+    };
+  }, [page, search, filterStatus, refreshTrigger]);
+
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +103,7 @@ export function Users() {
           )}
         </div>
         <button
-          onClick={fetchUsers}
+          onClick={() => setRefreshTrigger(prev => prev + 1)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all bg-white shadow-sm cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
