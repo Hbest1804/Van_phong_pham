@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "seed:admin": "node src/scripts/seed-admin.js"
+    "seed:admin": "node src/scripts/seed-admin.js",
+    "test": "echo \"No backend tests specified\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
