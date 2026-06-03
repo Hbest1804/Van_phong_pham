@@ -88,6 +88,10 @@ export function FloatingAiChat() {
         const res = await aiApi.getSessionMessages(activeSessionId);
         if (res.success && res.data) {
           setMessages(res.data);
+        } else {
+          // Reset phiên chat nếu gặp lỗi truy cập (ví dụ: phiên đã bị xóa hoặc không có quyền)
+          setActiveSessionId(null);
+          setMessages([]);
         }
       } catch (err) {
         console.error('Lỗi tải tin nhắn (Floating Chat):', err);
@@ -160,6 +164,30 @@ export function FloatingAiChat() {
 
         if (aiResponse.sessionId === activeSessionIdRef.current) {
           setMessages(prev => [...prev, tempAiMsg]);
+        }
+      } else {
+        // Xử lý lỗi trả về từ API (ví dụ: 403 / 404)
+        const errMsg = res.message || 'Lỗi hệ thống. Vui lòng thử lại sau.';
+        const isAuthError = errMsg.includes('không có quyền') || errMsg.includes('không tồn tại');
+        
+        if (isAuthError) {
+          setActiveSessionId(null);
+          activeSessionIdRef.current = null;
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('floating_chat_session_id');
+          }
+        }
+
+        const errorMsg: ChatMessage = {
+          id: generateUUID(),
+          sessionId: activeSessionId || '',
+          sender: 'ai',
+          message: errMsg + (isAuthError ? ' Phiên trò chuyện đã được tự động đặt lại. Vui lòng thử gửi lại tin nhắn.' : ''),
+          createdAt: new Date().toISOString(),
+        };
+        
+        if (activeSessionId === activeSessionIdRef.current) {
+          setMessages(prev => [...prev, errorMsg]);
         }
       }
     } catch (err) {
