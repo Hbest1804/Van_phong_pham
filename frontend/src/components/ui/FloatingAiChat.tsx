@@ -99,9 +99,14 @@ export function FloatingAiChat() {
     loadMessages();
   }, [isOpen, activeSessionId]);
 
-  // 4. Cuộn xuống cuối
+  // 4. Cuộn xuống cuối (chỉ cuộn container tin nhắn)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [messages, isSending]);
 
   // 5. Trích xuất sản phẩm gợi ý

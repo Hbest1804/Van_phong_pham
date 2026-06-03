@@ -118,9 +118,14 @@ export function AiAdvisor() {
     loadMessages();
   }, [activeSessionId]);
 
-  // 4. Tự động cuộn xuống cuối mỗi khi có tin nhắn mới hoặc đang gửi tin
+  // 4. Tự động cuộn xuống cuối mỗi khi có tin nhắn mới hoặc đang gửi tin (chỉ cuộn container chat, tránh nhảy trang)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [messages, isSending]);
 
   // 5. Trích xuất thẻ sản phẩm được giới thiệu dựa trên ID UUID trong văn bản
