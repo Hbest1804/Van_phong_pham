@@ -50,10 +50,12 @@ async function request<T>(
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
   const token = localStorage.getItem('accessToken');
+  const guestSessionId = localStorage.getItem('guest_chat_session_id');
 
   const headers: Record<string, string> = {
     ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(!token && guestSessionId ? { 'x-guest-session-id': guestSessionId } : {}),
     ...(options.headers as Record<string, string>),
   };
 
@@ -632,5 +634,80 @@ export const adminUsersApi = {
       body: JSON.stringify({ status }),
     }),
 };
+
+// ── AI Advisor API ────────────────────────────────────────────────────────────
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  userId: string | null;
+  guestSessionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  sender: 'user' | 'ai';
+  message: string;
+  createdAt: string;
+}
+
+export interface ChatResponse {
+  response: string;
+  sessionId: string;
+  sessionTitle: string;
+  recommendedProducts: Product[];
+}
+
+export const aiApi = {
+  /**
+   * POST /api/v1/ai/chat
+   * Gửi tin nhắn tư vấn tới AI
+   */
+  chat: (message: string, sessionId?: string) =>
+    request<ChatResponse>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, sessionId }),
+    }),
+
+  /**
+   * GET /api/v1/ai/search
+   * Tìm kiếm sản phẩm thông minh bằng ngôn ngữ tự nhiên thông qua AI
+   */
+  search: (query: string) =>
+    request<Product[]>(`/ai/search?q=${encodeURIComponent(query)}`, {
+      method: 'GET',
+    }),
+
+  /**
+   * GET /api/v1/ai/sessions
+   * Lấy danh sách các cuộc hội thoại
+   */
+  getSessions: () =>
+    request<ChatSession[]>('/ai/sessions', {
+      method: 'GET',
+    }),
+
+  /**
+   * GET /api/v1/ai/sessions/:session_id
+   * Lấy lịch sử tin nhắn của một cuộc hội thoại
+   */
+  getSessionMessages: (sessionId: string) =>
+    request<ChatMessage[]>(`/ai/sessions/${sessionId}`, {
+      method: 'GET',
+    }),
+
+  /**
+   * DELETE /api/v1/ai/sessions/:session_id
+   * Xóa một cuộc hội thoại
+   */
+  deleteSession: (sessionId: string) =>
+    request<void>(`/ai/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+};
+
 
 

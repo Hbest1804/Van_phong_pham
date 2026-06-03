@@ -728,3 +728,41 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
+-- ============================================================
+-- 22. BẢNG: chat_sessions
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_sessions (
+  id               UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID         REFERENCES users (id) ON DELETE CASCADE,
+  guest_session_id UUID,
+  title            VARCHAR(255) DEFAULT 'Cuộc trò chuyện mới',
+  created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_guest_id ON chat_sessions (guest_session_id);
+
+-- ============================================================
+-- 23. BẢNG: chat_messages
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_id  UUID        NOT NULL REFERENCES chat_sessions (id) ON DELETE CASCADE,
+  sender      VARCHAR(10) NOT NULL CHECK (sender IN ('user', 'ai')),
+  message     TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages (session_id);
+
+-- trigger for updated_at on chat_sessions
+DROP TRIGGER IF EXISTS trg_chat_sessions_updated_at ON chat_sessions;
+CREATE TRIGGER trg_chat_sessions_updated_at
+  BEFORE UPDATE ON chat_sessions
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+

@@ -14,6 +14,7 @@ const required = [
   'SMTP_HOST',
   'SMTP_USER',
   'SMTP_PASS',
+  'GEMINI_API_KEY',
 ];
 
 for (const key of required) {
@@ -29,6 +30,8 @@ export const env = {
   SUPABASE_URL: process.env.SUPABASE_URL,
   SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+
 
   JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
