@@ -92,12 +92,17 @@ export async function chatWithAI(userId, guestSessionId, sessionId, message) {
     .from('chat_messages')
     .select('sender, message, created_at')
     .eq('session_id', activeSessionId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(30);
 
   if (historyError) {
     console.error('[ai.service] Lỗi lấy lịch sử chat:', historyError.message);
     throw new AppError('Lỗi tải lịch sử trò chuyện.', 500);
+  }
+
+  // Đảo ngược lại mảng để có thứ tự thời gian tăng dần trước khi gửi tới Gemini
+  if (history) {
+    history.reverse();
   }
 
   // 4. Lấy danh sách toàn bộ sản phẩm đang hoạt động để làm dữ liệu ngữ cảnh cho AI
