@@ -46,6 +46,12 @@ export function FloatingAiChat() {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [guestSessionId, setGuestSessionId] = useState<string | null>(null);
 
+  // Ref theo dõi session hiện tại để tránh race condition
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -130,8 +136,10 @@ export function FloatingAiChat() {
       if (res.success && res.data) {
         const aiResponse = res.data;
 
-        if (!activeSessionId) {
+        const isNewSession = !activeSessionId;
+        if (isNewSession && !activeSessionIdRef.current) {
           setActiveSessionId(aiResponse.sessionId);
+          activeSessionIdRef.current = aiResponse.sessionId;
         }
 
         const tempAiMsg: ChatMessage = {
@@ -141,18 +149,23 @@ export function FloatingAiChat() {
           message: aiResponse.response,
           createdAt: new Date().toISOString(),
         };
-        setMessages(prev => [...prev, tempAiMsg]);
+
+        if (aiResponse.sessionId === activeSessionIdRef.current) {
+          setMessages(prev => [...prev, tempAiMsg]);
+        }
       }
     } catch (err) {
       console.error('Lỗi gửi tin nhắn (Floating Chat):', err);
-      const errorMsg: ChatMessage = {
-        id: generateUUID(),
-        sessionId: activeSessionId || '',
-        sender: 'ai',
-        message: 'Lỗi kết nối với AI. Vui lòng thử lại.',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      if (activeSessionId === activeSessionIdRef.current) {
+        const errorMsg: ChatMessage = {
+          id: generateUUID(),
+          sessionId: activeSessionId || '',
+          sender: 'ai',
+          message: 'Lỗi kết nối với AI. Vui lòng thử lại.',
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+      }
     } finally {
       setIsSending(false);
     }

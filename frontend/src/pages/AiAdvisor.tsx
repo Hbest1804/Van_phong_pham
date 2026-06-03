@@ -46,6 +46,12 @@ export function AiAdvisor() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [guestSessionId, setGuestSessionId] = useState<string | null>(null);
 
+  // Ref theo dõi session hiện tại để tránh race condition khi chuyển phiên chat
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   // States UI
   const [inputValue, setInputValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -151,13 +157,15 @@ export function AiAdvisor() {
       if (res.success && res.data) {
         const aiResponse = res.data;
 
-        // Nếu là phiên chat mới, cập nhật ID phiên đang hoạt động và load lại sidebar
-        if (!activeSessionId) {
+        // Nếu là phiên chat mới và người dùng chưa chuyển sang phiên khác, cập nhật ID phiên đang hoạt động và load lại sidebar
+        const isNewSession = !activeSessionId;
+        if (isNewSession && !activeSessionIdRef.current) {
           setActiveSessionId(aiResponse.sessionId);
+          activeSessionIdRef.current = aiResponse.sessionId;
           loadSessions();
         }
 
-        // Cập nhật tin nhắn phản hồi của AI lên giao diện
+        // Cập nhật tin nhắn phản hồi của AI lên giao diện nếu người dùng vẫn ở đúng phiên chat này
         const tempAiMsg: ChatMessage = {
           id: generateUUID(),
           sessionId: aiResponse.sessionId,
@@ -165,11 +173,10 @@ export function AiAdvisor() {
           message: aiResponse.response,
           createdAt: new Date().toISOString(),
         };
-        setMessages(prev => {
-          // Lọc bỏ tin nhắn tạm nếu cần, hoặc chỉ chèn tin AI tiếp vào
-          // Vì tin nhắn user đã được render, ta chỉ cần append tin nhắn AI
-          return [...prev, tempAiMsg];
-        });
+        
+        if (aiResponse.sessionId === activeSessionIdRef.current) {
+          setMessages(prev => [...prev, tempAiMsg]);
+        }
 
         // Cập nhật thời gian update của session trong danh sách sessions cục bộ
         setSessions(prev =>
@@ -182,15 +189,17 @@ export function AiAdvisor() {
       }
     } catch (err) {
       console.error('Lỗi gửi tin nhắn đến AI:', err);
-      // Hiển thị tin nhắn lỗi từ hệ thống
-      const errorMsg: ChatMessage = {
-        id: generateUUID(),
-        sessionId: activeSessionId || '',
-        sender: 'ai',
-        message: 'Xin lỗi, hệ thống AI tư vấn đang gặp sự cố kết nối. Vui lòng gửi lại câu hỏi hoặc tải lại trang.',
-        createdAt: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      // Hiển thị tin nhắn lỗi từ hệ thống nếu người dùng vẫn đang ở đúng phiên chat này
+      if (activeSessionId === activeSessionIdRef.current) {
+        const errorMsg: ChatMessage = {
+          id: generateUUID(),
+          sessionId: activeSessionId || '',
+          sender: 'ai',
+          message: 'Xin lỗi, hệ thống AI tư vấn đang gặp sự cố kết nối. Vui lòng gửi lại câu hỏi hoặc tải lại trang.',
+          createdAt: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+      }
     } finally {
       setIsSending(false);
     }
