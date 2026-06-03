@@ -468,7 +468,8 @@ Quy tắc tìm kiếm và định dạng phản hồi:
         // Parse mảng ID từ phản hồi của AI
         const parsed = JSON.parse(aiText.trim());
         if (Array.isArray(parsed)) {
-          matchedIds = parsed;
+          // Lọc các UUID hợp lệ để tránh lỗi cú pháp Supabase/PostgreSQL (lỗi 500)
+          matchedIds = parsed.filter(id => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
         }
       } catch (parseErr) {
         // Fallback: sử dụng regex để trích xuất UUID nếu AI vi phạm định dạng JSON
