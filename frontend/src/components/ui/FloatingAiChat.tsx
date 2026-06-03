@@ -91,6 +91,9 @@ export function FloatingAiChat() {
         }
       } catch (err) {
         console.error('Lỗi tải tin nhắn (Floating Chat):', err);
+        // Reset phiên chat nếu gặp lỗi truy cập (ví dụ: phiên đã bị xóa hoặc không có quyền)
+        setActiveSessionId(null);
+        setMessages([]);
       } finally {
         setIsLoadingMessages(false);
       }

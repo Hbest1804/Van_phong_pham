@@ -110,6 +110,9 @@ export function AiAdvisor() {
         }
       } catch (err) {
         console.error('Lỗi tải tin nhắn:', err);
+        // Reset phiên chat nếu gặp lỗi truy cập (ví dụ: phiên đã bị xóa hoặc không có quyền)
+        setActiveSessionId(null);
+        setMessages([]);
       } finally {
         setIsLoadingMessages(false);
       }
