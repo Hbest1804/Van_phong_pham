@@ -31,16 +31,18 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full bg-white/70 backdrop-blur-xl border-b border-indigo-100/50 shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <Link to="/" className="flex items-center space-x-2">
-          <span className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600">Thiên đường văn phòng phẩm </span>
+        <Link to="/" className="flex items-center space-x-1 sm:space-x-2 shrink-0">
+          <span className="text-sm sm:text-xl md:text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 whitespace-nowrap">
+            VPP Thiên Đường
+          </span>
         </Link>
-        <div className="flex flex-1 items-center justify-center px-6">
-          <form onSubmit={handleSearch} className="w-full max-w-md relative group flex items-center">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-indigo-400 group-focus-within:text-violet-600 transition-colors" />
+        <div className="flex-1 max-w-[140px] sm:max-w-md mx-2 sm:mx-6">
+          <form onSubmit={handleSearch} className="w-full relative group flex items-center">
+            <Search className="absolute left-2.5 top-[11px] h-3.5 w-3.5 text-indigo-400 group-focus-within:text-violet-600 transition-colors" />
             <Input
               type="search"
-              placeholder="Tìm kiếm thường hoặc mô tả bằng AI..."
-              className="pl-10 pr-10 border-indigo-100 bg-white/50 focus-visible:ring-violet-500 rounded-full transition-all"
+              placeholder="Tìm kiếm..."
+              className="pl-8 pr-8 text-xs sm:text-sm border-indigo-100 bg-white/50 focus-visible:ring-violet-500 rounded-full transition-all py-1.5 h-9"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -48,10 +50,10 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={handleAiSearch}
-                className="absolute right-3 p-1.5 rounded-full text-violet-600 hover:bg-violet-50 hover:text-violet-700 transition-all cursor-pointer flex items-center justify-center"
+                className="absolute right-2.5 top-1 p-1.5 rounded-full text-violet-600 hover:bg-violet-50 hover:text-violet-700 transition-all cursor-pointer flex items-center justify-center"
                 title="Tìm kiếm thông minh bằng AI"
               >
-                <Sparkles className="h-4 w-4 animate-pulse" />
+                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
               </button>
             )}
           </form>

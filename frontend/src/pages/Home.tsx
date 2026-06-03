@@ -21,6 +21,7 @@ export function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<number>(1000000);
   const [localPrice, setLocalPrice] = useState<number>(1000000);
+  const [showFilters, setShowFilters] = useState<boolean>(false);
 
   // Debounce: chỉ cập nhật priceRange (trigger API) sau 400ms kể từ lần kéo slider cuối cùng
   useEffect(() => {
@@ -132,49 +133,65 @@ export function Home() {
       
       <div className="flex flex-col md:flex-row gap-8">
         {/* Sidebar Filters */}
-        <aside className="w-full md:w-64 space-y-8 bg-white/60 backdrop-blur-xl p-6 rounded-2xl shadow-sm border border-indigo-50 h-fit">
-          <div>
-            <h3 className="font-semibold mb-4 text-indigo-900 border-b border-indigo-100 pb-2">Danh mục</h3>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleCategoryChange('all')}
-                className={cn(
-                  "px-4 py-2 rounded-full text-sm font-medium transition-all duration-300",
-                  selectedCategory === 'all'
-                    ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md transform scale-105"
-                    : "bg-white text-slate-600 hover:bg-indigo-50 border border-slate-200 hover:scale-105"
-                )}
-              >
-                Tất cả
-              </button>
-              {categories.map(c => (
+        <aside className="w-full md:w-64 bg-white/60 backdrop-blur-xl p-4 md:p-6 rounded-2xl shadow-sm border border-indigo-50 h-fit">
+          {/* Header bộ lọc trên mobile */}
+          <div 
+            onClick={() => setShowFilters(!showFilters)} 
+            className="flex items-center justify-between md:hidden cursor-pointer select-none"
+          >
+            <h3 className="font-bold text-sm text-indigo-900 flex items-center gap-1.5">
+              <span>Bộ lọc sản phẩm</span>
+            </h3>
+            <Button variant="ghost" size="sm" className="text-xs text-indigo-600 h-auto py-1 px-2.5 rounded-lg hover:bg-indigo-50">
+              {showFilters ? "Thu gọn" : "Mở rộng"}
+            </Button>
+          </div>
+
+          <div className={cn("space-y-6 md:space-y-8 mt-4 md:mt-0", !showFilters && "hidden md:block")}>
+            <div>
+              <h3 className="font-semibold mb-4 text-indigo-900 border-b border-indigo-100 pb-2 text-sm md:text-base">Danh mục</h3>
+              {/* Thanh danh mục cuộn ngang trên mobile, lưới bọc tự do trên desktop */}
+              <div className="flex md:flex-wrap overflow-x-auto gap-2 pb-3 md:pb-0 whitespace-nowrap scrollbar-none -mx-2 px-2 md:mx-0 md:px-0">
                 <button
-                  key={c.id}
-                  onClick={() => handleCategoryChange(c.id)}
+                  onClick={() => handleCategoryChange('all')}
                   className={cn(
-                    "px-4 py-2 rounded-full text-sm font-medium transition-all duration-300",
-                    selectedCategory === c.id
-                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md transform scale-105"
-                      : "bg-white text-slate-600 hover:bg-indigo-50 border border-slate-200 hover:scale-105"
+                    "px-3.5 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all duration-300 shrink-0",
+                    selectedCategory === 'all'
+                      ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md transform scale-102"
+                      : "bg-white text-slate-600 hover:bg-indigo-50 border border-slate-200 hover:scale-102"
                   )}
                 >
-                  {c.name}
+                  Tất cả
                 </button>
-              ))}
+                {categories.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleCategoryChange(c.id)}
+                    className={cn(
+                      "px-3.5 py-1.5 md:px-4 md:py-2 rounded-full text-xs md:text-sm font-medium transition-all duration-300 shrink-0",
+                      selectedCategory === c.id
+                        ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md transform scale-102"
+                        : "bg-white text-slate-600 hover:bg-indigo-50 border border-slate-200 hover:scale-102"
+                    )}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div>
-            <h3 className="font-semibold mb-3 text-indigo-900 border-b border-indigo-100 pb-2">Khoảng giá (Dưới)</h3>
-            <input 
-              type="range" 
-              min="10000" 
-              max="1000000" 
-              step="10000" 
-              value={localPrice}
-              onChange={(e) => handlePriceChange(Number(e.target.value))}
-              className="w-full accent-indigo-600"
-            />
-            <div className="text-sm font-bold text-indigo-600 mt-2">{formatCurrency(localPrice)}</div>
+            <div>
+              <h3 className="font-semibold mb-3 text-indigo-900 border-b border-indigo-100 pb-2 text-sm md:text-base">Khoảng giá (Dưới)</h3>
+              <input 
+                type="range" 
+                min="10000" 
+                max="1000000" 
+                step="10000" 
+                value={localPrice}
+                onChange={(e) => handlePriceChange(Number(e.target.value))}
+                className="w-full accent-indigo-600 cursor-pointer"
+              />
+              <div className="text-sm font-bold text-indigo-600 mt-2">{formatCurrency(localPrice)}</div>
+            </div>
           </div>
         </aside>
 
