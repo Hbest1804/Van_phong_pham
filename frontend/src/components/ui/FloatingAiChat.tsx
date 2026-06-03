@@ -165,9 +165,17 @@ export function FloatingAiChat() {
     }
   };
 
-  // 7. Render nội dung markdown đơn giản
+  // 7. Render nội dung markdown đơn giản (chống XSS)
   const renderMessageText = (text: string) => {
-    let cleanText = text.replace(/\[ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, '');
+    // 0. Mã hóa các ký tự HTML đặc biệt để chống tấn công XSS
+    let safeText = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+    let cleanText = safeText.replace(/\[ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, '');
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     const lines = cleanText.split('\n');
     const processedLines = lines.map(line => {

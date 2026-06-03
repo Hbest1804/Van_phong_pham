@@ -135,16 +135,24 @@ Quy tắc ứng xử và tư vấn:
 7. Giải thích rõ vì sao sản phẩm đó phù hợp với nhu cầu của họ (ví dụ: định lượng giấy, tính năng máy tính, công dụng bìa còng).
 `;
 
-  // Định dạng lại lịch sử chat theo định dạng của Gemini API (user và model roles)
-  const contents = history.map(msg => ({
-    role: msg.sender === 'user' ? 'user' : 'model',
-    parts: [{ text: msg.message }]
-  }));
+  // Định dạng lại lịch sử chat theo định dạng của Gemini API (đảm bảo luân phiên user và model)
+  const contents = [];
+  for (const msg of history) {
+    const role = msg.sender === 'user' ? 'user' : 'model';
+    if (contents.length > 0 && contents[contents.length - 1].role === role) {
+      contents[contents.length - 1].parts[0].text += '\n' + msg.message;
+    } else {
+      contents.push({
+        role,
+        parts: [{ text: msg.message }]
+      });
+    }
+  }
 
   // 6. Gọi Gemini API
   let aiResponseText = '';
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
     
     const response = await fetch(geminiUrl, {
       method: 'POST',
@@ -422,7 +430,7 @@ Quy tắc tìm kiếm và định dạng phản hồi:
   // 3. Gọi Gemini API
   let matchedIds = [];
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
     
     const response = await fetch(geminiUrl, {
       method: 'POST',

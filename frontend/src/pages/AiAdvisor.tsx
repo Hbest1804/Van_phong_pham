@@ -225,10 +225,18 @@ export function AiAdvisor() {
     }
   };
 
-  // 8. Định dạng hiển thị văn bản tin nhắn của AI (hỗ trợ markdown cơ bản)
+  // 8. Định dạng hiển thị văn bản tin nhắn của AI (hỗ trợ markdown cơ bản và chống XSS)
   const renderMessageText = (text: string) => {
+    // 0. Mã hóa các ký tự HTML đặc biệt để chống tấn công XSS
+    let safeText = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
     // 1. Ẩn mã ID sản phẩm dạng [ID: uuid] trong câu trả lời AI để tránh rối mắt (vì đã có card sản phẩm bên dưới)
-    let cleanText = text.replace(/\[ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, '');
+    let cleanText = safeText.replace(/\[ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, '');
 
     // 2. Định dạng chữ đậm **text**
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');

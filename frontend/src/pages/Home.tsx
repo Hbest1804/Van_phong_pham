@@ -57,12 +57,17 @@ export function Home() {
       aiApi.search(aiSearchQuery)
         .then(res => {
           if (isMounted && res.success && res.data) {
-            setDisplayedProducts(res.data);
+            const filtered = res.data.filter(p => {
+              const matchesCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
+              const matchesPrice = p.price <= priceRange;
+              return matchesCategory && matchesPrice;
+            });
+            setDisplayedProducts(filtered);
             setPagination({
-              totalItems: res.data.length,
+              totalItems: filtered.length,
               totalPages: 1,
               currentPage: 1,
-              limit: res.data.length || 12
+              limit: filtered.length || 12
             });
           }
         })
