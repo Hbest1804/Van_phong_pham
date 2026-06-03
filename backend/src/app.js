@@ -15,6 +15,7 @@ import cartRoutes from './routes/cart.routes.js';
 import orderRoutes from './routes/order.routes.js';
 import adminUserRoutes from './routes/adminUser.routes.js';
 import statisticsRoutes from './routes/statistics.routes.js';
+import aiRoutes from './routes/ai.routes.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/admin/users', adminUserRoutes);
 app.use('/api/v1/admin/statistics', statisticsRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // ── Error Handling ────────────────────────────────────────────────────────────
 

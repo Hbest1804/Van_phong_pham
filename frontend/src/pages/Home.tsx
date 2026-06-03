@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../contexts/StoreContext';
 import { useCart } from '../contexts/CartContext';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Loader2 } from 'lucide-react';
+import { ShoppingCart, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { formatCurrency, cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { HeroSlider } from '../components/ui/HeroSlider';
-import { productsApi } from '../lib/api';
+import { productsApi, aiApi } from '../lib/api';
 import { Product } from '../types';
 
 export function Home() {
@@ -16,6 +16,7 @@ export function Home() {
   const { addItem } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
+  const aiSearchQuery = searchParams.get('aiSearch') || '';
   
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<number>(1000000);
@@ -52,6 +53,33 @@ export function Home() {
     let isMounted = true;
     setLoading(true);
 
+    if (aiSearchQuery) {
+      aiApi.search(aiSearchQuery)
+        .then(res => {
+          if (isMounted && res.success && res.data) {
+            const filtered = res.data.filter(p => {
+              const matchesCategory = selectedCategory === 'all' || p.categoryId === selectedCategory;
+              const matchesPrice = p.price <= priceRange;
+              return matchesCategory && matchesPrice;
+            });
+            setDisplayedProducts(filtered);
+            setPagination({
+              totalItems: filtered.length,
+              totalPages: 1,
+              currentPage: 1,
+              limit: filtered.length || 12
+            });
+          }
+        })
+        .catch(err => {
+          console.error('Lỗi tìm kiếm sản phẩm bằng AI:', err);
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+      return;
+    }
+
     productsApi.getProducts({
       page,
       limit: 12,
@@ -75,7 +103,7 @@ export function Home() {
     return () => {
       isMounted = false;
     };
-  }, [searchQuery, selectedCategory, priceRange, page]);
+  }, [searchQuery, aiSearchQuery, selectedCategory, priceRange, page]);
 
   // Reset trang về 1 khi đổi danh mục
   const handleCategoryChange = (catId: string) => {
@@ -154,6 +182,12 @@ export function Home() {
         <div className="flex-1">
           {searchQuery && (
             <h2 className="text-2xl font-bold mb-6 text-indigo-950">Kết quả tìm kiếm cho: "{searchQuery}"</h2>
+          )}
+          {aiSearchQuery && (
+            <h2 className="text-2xl font-bold mb-6 text-violet-950 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-600 animate-pulse animate-duration-1000" />
+              Kết quả tìm kiếm thông minh bằng AI cho: "{aiSearchQuery}"
+            </h2>
           )}
           
           <AnimatePresence mode="wait">

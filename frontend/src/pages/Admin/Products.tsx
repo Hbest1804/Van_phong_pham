@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { formatCurrency } from '../../lib/utils';
 import { productsApi } from '../../lib/api';
-import { Plus, Edit2, Trash2, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
 import { Product } from '../../types';
 
 type FormData = Omit<Product, 'id' | 'price' | 'stock'> & {
@@ -141,147 +141,161 @@ export function Products() {
       </div>
 
       {(isAdding || isEditing) && (
-        <form 
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSave();
-          }} 
-          className="bg-white p-6 rounded-lg border shadow-sm"
-        >
-          <h2 className="text-lg font-bold mb-4">{isEditing ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          {/* Backdrop click to cancel/close */}
+          <div className="absolute inset-0" onClick={handleCancel}></div>
+          
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSave();
+            }} 
+            className="bg-white p-6 rounded-xl border border-slate-100 shadow-2xl max-w-2xl w-full relative max-h-[90vh] overflow-y-auto z-10 animate-in fade-in zoom-in-95 duration-200"
+          >
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-full hover:bg-slate-100"
+              aria-label="Đóng"
+            >
+              <X className="w-5 h-5" />
+            </button>
 
-          {/* Feedback messages */}
-          {submitError && (
-            <div className="flex items-center gap-2 mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              {submitError}
-            </div>
-          )}
-          {submitSuccess && (
-            <div className="flex items-center gap-2 mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-              <CheckCircle className="w-4 h-4 flex-shrink-0" />
-              {isEditing ? 'Cập nhật sản phẩm thành công!' : 'Tạo sản phẩm thành công!'}
-            </div>
-          )}
+            <h2 className="text-lg font-bold mb-4">{isEditing ? 'Sửa sản phẩm' : 'Thêm sản phẩm mới'}</h2>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="text-sm font-medium">Tên SP *</label>
-              <Input 
-                required 
-                value={formData.name} 
-                onChange={e => setFormData({ ...formData, name: e.target.value })} 
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Danh mục *</label>
-              <select
-                id="product-category-select"
-                required
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950"
-                value={formData.categoryId}
-                onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
-              >
-                <option value="">Chọn danh mục</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Giá (VND) *</label>
-              <Input
-                type="number"
-                required
-                min={0}
-                value={formData.price}
-                onChange={e => {
-                  const val = e.target.value;
-                  setFormData({ ...formData, price: val === '' ? '' : Number(val) });
-                }}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Tồn kho *</label>
-              <Input
-                type="number"
-                required
-                min={0}
-                value={formData.stock}
-                onChange={e => {
-                  const val = e.target.value;
-                  setFormData({ ...formData, stock: val === '' ? '' : Number(val) });
-                }}
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium mb-1">Hình ảnh sản phẩm</label>
-              <div className="flex gap-4 items-start">
-                {formData.image ? (
-                  <div className="relative w-24 h-24 border rounded-lg overflow-hidden group bg-slate-100 flex-shrink-0">
-                    <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, image: '' })}
-                      className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold"
-                    >
-                      Xóa ảnh
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center bg-slate-50 text-slate-400 flex-shrink-0">
-                    {uploadingImage ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6" />}
-                  </div>
-                )}
-                
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      id="product-image-file"
-                      className="hidden"
-                      onChange={handleImageChange}
-                      disabled={uploadingImage}
-                    />
-                    <label
-                      htmlFor="product-image-file"
-                      className={`inline-flex items-center justify-center rounded-md text-sm font-medium border border-slate-200 bg-white px-4 py-2 hover:bg-slate-100 hover:text-slate-900 cursor-pointer h-10 ${uploadingImage ? 'pointer-events-none opacity-50' : ''}`}
-                    >
-                      {uploadingImage ? 'Đang tải lên...' : 'Chọn từ máy tính'}
-                    </label>
-                    <span className="text-xs text-slate-500">Hỗ trợ JPG, PNG, WEBP tối đa 5MB</span>
-                  </div>
-                  
-                  {uploadImageError && (
-                    <p className="text-xs text-red-600 font-medium">{uploadImageError}</p>
+            {/* Feedback messages */}
+            {submitError && (
+              <div className="flex items-center gap-2 mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {submitError}
+              </div>
+            )}
+            {submitSuccess && (
+              <div className="flex items-center gap-2 mb-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                {isEditing ? 'Cập nhật sản phẩm thành công!' : 'Tạo sản phẩm thành công!'}
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-sm font-medium">Tên SP *</label>
+                <Input 
+                  required 
+                  value={formData.name} 
+                  onChange={e => setFormData({ ...formData, name: e.target.value })} 
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Danh mục *</label>
+                <select
+                  id="product-category-select"
+                  required
+                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950"
+                  value={formData.categoryId}
+                  onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
+                >
+                  <option value="">Chọn danh mục</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Giá (VND) *</label>
+                <Input
+                  type="number"
+                  required
+                  min={0}
+                  value={formData.price}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, price: val === '' ? '' : Number(val) });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Tồn kho *</label>
+                <Input
+                  type="number"
+                  required
+                  min={0}
+                  value={formData.stock}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setFormData({ ...formData, stock: val === '' ? '' : Number(val) });
+                  }}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium mb-1">Hình ảnh sản phẩm</label>
+                <div className="flex gap-4 items-start">
+                  {formData.image ? (
+                    <div className="relative w-24 h-24 border rounded-lg overflow-hidden group bg-slate-100 flex-shrink-0">
+                      <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image: '' })}
+                        className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-xs font-semibold"
+                      >
+                        Xóa ảnh
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-lg flex items-center justify-center bg-slate-50 text-slate-400 flex-shrink-0">
+                      {uploadingImage ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6" />}
+                    </div>
                   )}
+                  
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="product-image-file"
+                        className="hidden"
+                        onChange={handleImageChange}
+                        disabled={uploadingImage}
+                      />
+                      <label
+                        htmlFor="product-image-file"
+                        className={`inline-flex items-center justify-center rounded-md text-sm font-medium border border-slate-200 bg-white px-4 py-2 hover:bg-slate-100 hover:text-slate-900 cursor-pointer h-10 ${uploadingImage ? 'pointer-events-none opacity-50' : ''}`}
+                      >
+                        {uploadingImage ? 'Đang tải lên...' : 'Chọn từ máy tính'}
+                      </label>
+                      <span className="text-xs text-slate-500">Hỗ trợ JPG, PNG, WEBP tối đa 5MB</span>
+                    </div>
+                    
+                    {uploadImageError && (
+                      <p className="text-xs text-red-600 font-medium">{uploadImageError}</p>
+                    )}
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-400">Hoặc URL ảnh:</span>
-                    <Input
-                      placeholder="https://..."
-                      value={formData.image}
-                      onChange={e => setFormData({ ...formData, image: e.target.value })}
-                      disabled={uploadingImage}
-                      className="h-8 text-xs flex-1"
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-400">Hoặc URL ảnh:</span>
+                      <Input
+                        placeholder="https://..."
+                        value={formData.image}
+                        onChange={e => setFormData({ ...formData, image: e.target.value })}
+                        disabled={uploadingImage}
+                        className="h-8 text-xs flex-1"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
+              <div className="col-span-2">
+                <label className="text-sm font-medium">Mô tả</label>
+                <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+              </div>
             </div>
-            <div className="col-span-2">
-              <label className="text-sm font-medium">Mô tả</label>
-              <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={submitting}>Hủy</Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang lưu...</>
+                ) : 'Lưu'}
+              </Button>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={handleCancel} disabled={submitting}>Hủy</Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang lưu...</>
-              ) : 'Lưu'}
-            </Button>
-          </div>
-        </form>
+          </form>
+        </div>
       )}
 
       <div className="bg-white border rounded-lg overflow-hidden">

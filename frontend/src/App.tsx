@@ -20,6 +20,7 @@ import { ResetPassword } from './pages/Auth/ResetPassword';
 import { Cart } from './pages/Cart';
 import { Checkout } from './pages/Checkout';
 import { Profile } from './pages/Profile';
+import { AiAdvisor } from './pages/AiAdvisor';
 
 import { Dashboard } from './pages/Admin/Dashboard';
 import { Products } from './pages/Admin/Products';
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="profile" element={<Profile />} />
                 <Route path="forgot-password" element={<ForgotPassword />} />
                 <Route path="reset-password" element={<ResetPassword />} />
+                <Route path="ai-advisor" element={<AiAdvisor />} />
               </Route>
 
               {/* Admin Routes */}

@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Footer } from './Footer';
+import { FloatingAiChat } from '../ui/FloatingAiChat';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function MainLayout() {
@@ -31,8 +32,10 @@ export function MainLayout() {
           </motion.main>
         </AnimatePresence>
         <Footer />
+        <FloatingAiChat />
       </div>
     </div>
   );
 }
+
 
