@@ -3,6 +3,39 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { AppError } from '../utils/AppError.js';
 
 /**
+ * Trích xuất từ khóa tìm kiếm từ văn bản tiếng Việt
+ * Loại bỏ các từ dừng (stop words) phổ biến
+ * 
+ * @param {string} text 
+ * @returns {string[]}
+ */
+function extractKeywords(text) {
+  if (!text) return [];
+  const normalized = text.toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, ' ')
+    .trim();
+  
+  const words = normalized.split(/\s+/);
+  
+  const stopWords = new Set([
+    'tôi', 'em', 'mình', 'chúng', 'ta', 'bạn', 'quý', 'khách', 'anh', 'chị',
+    'muốn', 'cần', 'tìm', 'mua', 'xem', 'hỏi', 'tư', 'vấn', 'giới', 'thiệu',
+    'có', 'không', 'nào', 'gì', 'đâu', 'ở', 'tại', 'của', 'cho', 'một', 'những',
+    'cái', 'chiếc', 'cuốn', 'quyển', 'tờ', 'hộp', 'bộ', 'loại', 'mẫu',
+    'và', 'hoặc', 'nhưng', 'thì', 'là', 'để', 'như', 'với', 'trong', 'ngoài',
+    'này', 'kia', 'đó', 'ấy', 'nào', 'sao', 'thế',
+    'shop', 'cửa', 'hàng', 'tiệm', 'vpp', 'văn', 'phòng', 'phẩm',
+    'bán', 'cung', 'cấp', 'hiện', 'đang', 'được', 'lắm', 'nhỉ', 'nhé', 'nha', 'ạ'
+  ]);
+
+  const keywords = words
+    .map(w => w.trim())
+    .filter(w => w.length > 1 && !stopWords.has(w));
+  
+  return [...new Set(keywords)];
+}
+
+/**
  * Gửi câu hỏi tư vấn sản phẩm đến AI (Gemini)
  * 
  * @param {string|null} userId - ID của user nếu đã đăng nhập, null nếu là guest
@@ -105,15 +138,48 @@ export async function chatWithAI(userId, guestSessionId, sessionId, message) {
     history.reverse();
   }
 
-  // 4. Lấy danh sách toàn bộ sản phẩm đang hoạt động để làm dữ liệu ngữ cảnh cho AI
-  const { data: products, error: productsError } = await supabaseAdmin
+  // 4. Trích xuất từ khóa từ tin nhắn hiện tại và tin nhắn của người dùng trong lịch sử để làm context phù hợp
+  const userMessages = history
+    .filter(h => h.sender === 'user')
+    .map(h => h.message)
+    .join(' ');
+  const combinedText = `${userMessages} ${message}`;
+  const keywords = extractKeywords(combinedText);
+
+  let productsQuery = supabaseAdmin
     .from('products')
     .select('id, name, description, price, stock, categories(name)')
     .eq('is_active', true);
 
+  if (keywords.length > 0) {
+    const orConditions = keywords.flatMap(kw => [
+      `name.ilike.%${kw}%`,
+      `description.ilike.%${kw}%`
+    ]).join(',');
+    productsQuery = productsQuery.or(orConditions);
+  }
+
+  let { data: products, error: productsError } = await productsQuery.limit(15);
+
   if (productsError) {
     console.error('[ai.service] Lỗi lấy sản phẩm làm context:', productsError.message);
     throw new AppError('Lỗi tải danh mục sản phẩm của cửa hàng.', 500);
+  }
+
+  // Nếu không có từ khóa hoặc không tìm thấy sản phẩm khớp từ khóa, lấy top 15 sản phẩm mới nhất làm context nền
+  if (!products || products.length === 0) {
+    const { data: fallbackProducts, error: fallbackError } = await supabaseAdmin
+      .from('products')
+      .select('id, name, description, price, stock, categories(name)')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(15);
+
+    if (!fallbackError && fallbackProducts) {
+      products = fallbackProducts;
+    } else {
+      products = [];
+    }
   }
 
   // Định dạng danh sách sản phẩm gửi tới LLM
@@ -397,15 +463,32 @@ export async function searchProductsWithAI(query) {
     throw new AppError('Từ khóa tìm kiếm không được để trống.', 400);
   }
 
-  // 1. Lấy toàn bộ sản phẩm đang hoạt động làm ngữ cảnh
-  const { data: products, error: productsError } = await supabaseAdmin
+  // 1. Lấy các sản phẩm liên quan dựa trên từ khóa từ câu lệnh tìm kiếm (tối đa 20 sản phẩm ứng viên)
+  const keywords = extractKeywords(query);
+
+  let productsQuery = supabaseAdmin
     .from('products')
     .select('id, name, description, price, stock, categories(name)')
     .eq('is_active', true);
 
+  if (keywords.length > 0) {
+    const orConditions = keywords.flatMap(kw => [
+      `name.ilike.%${kw}%`,
+      `description.ilike.%${kw}%`
+    ]).join(',');
+    productsQuery = productsQuery.or(orConditions);
+  }
+
+  const { data: products, error: productsError } = await productsQuery.limit(20);
+
   if (productsError) {
     console.error('[ai.service] Lỗi lấy sản phẩm làm ngữ cảnh tìm kiếm:', productsError.message);
     throw new AppError('Lỗi tải dữ liệu sản phẩm.', 500);
+  }
+
+  // Nếu không tìm thấy ứng viên nào phù hợp, trả về mảng rỗng ngay lập tức (tiết kiệm token và thời gian gọi Gemini)
+  if (!products || products.length === 0) {
+    return [];
   }
 
   // Định dạng rút gọn tối ưu hóa số lượng token gửi đi
