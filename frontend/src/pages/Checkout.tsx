@@ -86,7 +86,10 @@ export function Checkout() {
         </motion.div>
         <h1 className="text-3xl font-black mb-4 text-slate-800">Đặt hàng thành công!</h1>
         <p className="text-slate-500 mb-8 text-lg">Cảm ơn bạn đã mua sắm tại Stationery Hub. Đơn hàng của bạn đang được xử lý.</p>
-        <Button size="lg" className="rounded-xl px-10 shadow-lg" onClick={() => navigate('/profile')}>Xem đơn hàng của tôi</Button>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Button size="lg" className="rounded-xl px-10 shadow-lg" onClick={() => navigate('/profile')}>Xem đơn hàng của tôi</Button>
+          <Button size="lg" variant="outline" className="rounded-xl px-10 border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => navigate('/')}>← Trang chủ</Button>
+        </div>
       </motion.div>
     );
   }
@@ -94,7 +97,18 @@ export function Checkout() {
   return (
     <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10">
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
-        <h2 className="text-2xl font-extrabold mb-6 text-indigo-950">Thông tin giao hàng</h2>
+        <div className="flex items-center gap-4 mb-6">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
+          >
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Trang chủ
+          </button>
+          <span className="text-slate-300">|</span>
+          <h2 className="text-2xl font-extrabold text-indigo-950">Thông tin giao hàng</h2>
+        </div>
         <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-xl rounded-2xl">
           <CardContent className="pt-8">
             <form id="checkout-form" onSubmit={handleSubmit} className="space-y-5">
