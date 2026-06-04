@@ -36,7 +36,7 @@ USER appuser
 EXPOSE 5000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=20s --timeout=10s --start-period=30s --retries=5 \
   CMD wget -qO- http://localhost:5000/api/health || exit 1
 
 CMD ["node", "src/server.js"]
