@@ -20,10 +20,10 @@ services:
       - vpp_net
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
-      interval: 30s
+      interval: 20s
       timeout: 10s
-      retries: 5
-      start_period: 15s
+      retries: 6
+      start_period: 40s
 
   # ─────────────────────────────────────────────────────────────
   # Frontend Builder – build React → đổ dist vào named volume
