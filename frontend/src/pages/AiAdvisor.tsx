@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useStore } from '../contexts/StoreContext';
 import { useCart } from '../contexts/CartContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Send,
   Sparkles,
@@ -39,6 +39,7 @@ export function AiAdvisor() {
   const { user } = useAuth();
   const { products: allStoreProducts } = useStore();
   const { addItem } = useCart();
+  const navigate = useNavigate();
 
   // State quản lý phiên và tin nhắn
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -431,6 +432,14 @@ export function AiAdvisor() {
             >
               <Menu className="w-5 h-5 text-slate-600" />
             </Button>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="hidden md:flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
+            >
+              <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              Trang chủ
+            </button>
             <div className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-600 shadow-inner">
                 <Sparkles className="w-5 h-5 animate-pulse" />

@@ -62,20 +62,28 @@ export function Cart() {
             ))}
           </AnimatePresence>
         </ul>
-        <div className="p-6 sm:p-8 bg-gradient-to-r from-indigo-50 to-violet-50 border-t flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div className="text-lg font-medium text-slate-600">
-            Tổng cộng: <br className="sm:hidden" />
-            <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 sm:ml-2 font-mono">
-              {formatCurrency(total)}
-            </span>
+        <div className="p-6 sm:p-8 bg-gradient-to-r from-indigo-50 to-violet-50 border-t flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+            <div className="text-lg font-medium text-slate-600">
+              Tổng cộng: <br className="sm:hidden" />
+              <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 sm:ml-2 font-mono">
+                {formatCurrency(total)}
+              </span>
+            </div>
           </div>
-          <Link to="/checkout" className="w-full sm:w-auto">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button size="lg" className="w-full rounded-xl px-12 py-6 text-lg font-bold shadow-xl shadow-indigo-200">
-                Thanh toán
-              </Button>
-            </motion.div>
-          </Link>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Link to="/" className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group">
+              <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              Trang chủ
+            </Link>
+            <Link to="/checkout" className="flex-1 sm:flex-none">
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button size="lg" className="w-full rounded-xl px-12 py-6 text-lg font-bold shadow-xl shadow-indigo-200">
+                  Thanh toán
+                </Button>
+              </motion.div>
+            </Link>
+          </div>
         </div>
       </div>
     </div>
