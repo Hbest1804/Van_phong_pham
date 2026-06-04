@@ -1,13 +1,14 @@
 import React from 'react';
 import { useCart } from '../contexts/CartContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { formatCurrency } from '../lib/utils';
 import { Button } from '../components/ui/Button';
-import { Trash2, Plus, Minus, ShoppingBag } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export function Cart() {
   const { items, updateQuantity, removeItem, total } = useCart();
+  const navigate = useNavigate();
 
   if (items.length === 0) {
     return (
@@ -23,7 +24,18 @@ export function Cart() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-extrabold mb-8 text-indigo-950">Giỏ hàng ({items.length})</h1>
+      <div className="flex items-center gap-4 mb-6">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
+        >
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          Quay lại
+        </button>
+        <span className="text-slate-300">|</span>
+        <h1 className="text-3xl font-extrabold text-indigo-950">Giỏ hàng ({items.length})</h1>
+      </div>
       <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white overflow-hidden">
         <ul className="divide-y divide-indigo-50">
           <AnimatePresence>
@@ -72,10 +84,10 @@ export function Cart() {
             </div>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Link to="/" className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group">
-              <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-              Trang chủ
-            </Link>
+            <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group">
+              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+              Quay lại
+            </button>
             <Link to="/checkout" className="flex-1 sm:flex-none">
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <Button size="lg" className="w-full rounded-xl px-12 py-6 text-lg font-bold shadow-xl shadow-indigo-200">

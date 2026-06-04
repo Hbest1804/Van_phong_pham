@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { ArrowLeft } from 'lucide-react';
 
 interface FieldError {
   email?: string;
@@ -64,6 +65,14 @@ export function Login() {
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-md mx-auto mt-12 mb-12 px-4">
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="flex items-center gap-1.5 mb-4 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
+      >
+        <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+        Quay lại
+      </button>
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl text-center">Đăng nhập</CardTitle>

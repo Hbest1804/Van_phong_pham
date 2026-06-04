@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Button';
@@ -17,6 +17,7 @@ const statusMap: Record<string, { label: string; color: string }> = {
 
 export function Profile() {
   const { user, updateProfile } = useAuth();
+  const navigate = useNavigate();
 
   const [name, setName]       = useState(user?.name || '');
   const [phone, setPhone]     = useState(user?.phone || '');
@@ -66,7 +67,18 @@ export function Profile() {
     <div className="max-w-6xl mx-auto grid lg:grid-cols-3 gap-8">
       {/* ── Thông tin cá nhân ─────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="lg:col-span-1">
-        <h2 className="text-2xl font-extrabold mb-6 text-indigo-950">Thông tin cá nhân</h2>
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
+          >
+            <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Quay lại
+          </button>
+          <span className="text-slate-300">|</span>
+          <h2 className="text-2xl font-extrabold text-indigo-950">Thông tin cá nhân</h2>
+        </div>
         <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-xl rounded-2xl overflow-hidden">
           <div className="h-2 w-full bg-gradient-to-r from-violet-500 to-indigo-500"></div>
           <CardContent className="pt-8">
