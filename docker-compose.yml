@@ -34,7 +34,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: /api/v1
+        VITE_API_URL: ""
     container_name: vpp_frontend_builder
     restart: "no"                        # chạy một lần, không restart
     entrypoint: ["sh", "-c", "cp -rf /dist/. /app/html/ && echo '[frontend] dist copied'"]
