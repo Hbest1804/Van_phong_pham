@@ -69,6 +69,15 @@ export function Checkout() {
     }
 
     if (paymentMethod === 'transfer') {
+      if (!cardHolder.trim()) {
+        setError('Vui lòng nhập tên chủ thẻ.');
+        return;
+      }
+      const month = parseInt(cardExpiry.slice(0, 2), 10);
+      if (cardExpiry.length < 5 || isNaN(month) || month < 1 || month > 12) {
+        setError('Vui lòng nhập ngày hết hạn hợp lệ (MM/YY).');
+        return;
+      }
       if (cardCvv.length < 3) {
         setCvvError('Vui lòng nhập mã CVV hợp lệ (3 chữ số).');
         return;
