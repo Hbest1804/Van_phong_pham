@@ -132,7 +132,7 @@ export function Checkout() {
         <p className="text-slate-500 mb-8 text-lg">Cảm ơn bạn đã mua sắm tại Stationery Hub. Đơn hàng của bạn đang được xử lý.</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button size="lg" className="rounded-xl px-10 shadow-lg" onClick={() => navigate('/profile')}>Xem đơn hàng của tôi</Button>
-          <Button size="lg" variant="outline" className="rounded-xl px-10 border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => navigate('/')}>← Trang chủ</Button>
+          <Button size="lg" variant="outline" className="rounded-xl px-10 border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => navigate(-1)}>← Quay lại</Button>
         </div>
       </motion.div>
     );
@@ -144,11 +144,11 @@ export function Checkout() {
         <div className="flex items-center gap-4 mb-6">
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-violet-600 transition-colors group"
           >
             <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            Trang chủ
+            Quay lại
           </button>
           <span className="text-slate-300">|</span>
           <h2 className="text-2xl font-extrabold text-indigo-950">Thông tin giao hàng</h2>
