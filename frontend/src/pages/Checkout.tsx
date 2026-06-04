@@ -8,7 +8,16 @@ import { Button } from '../components/ui/Button';
 import { formatCurrency } from '../lib/utils';
 import { PaymentMethod } from '../types';
 import { ordersApi } from '../lib/api';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+
+// Sinh số thẻ giả 16 chữ số một lần duy nhất
+const generateFakeCardNumber = () => {
+  const prefix = ['4539', '4916', '5234', '5412', '3714', '6011'][Math.floor(Math.random() * 6)];
+  const rest = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join('');
+  return (prefix + rest).replace(/(\d{4})(?=\d)/g, '$1 ');
+};
+
+const FAKE_CARD_NUMBER = generateFakeCardNumber();
 
 export function Checkout() {
   const { user } = useAuth();
@@ -22,6 +31,14 @@ export function Checkout() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
 
+  // State thẻ ngân hàng giả
+  const [cardNumber] = useState(FAKE_CARD_NUMBER);
+  const [cardHolder, setCardHolder] = useState(user?.name?.toUpperCase() || '');
+  const [cardExpiry, setCardExpiry] = useState('12/28');
+  const [cardCvv, setCardCvv] = useState('');
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+  const [cvvError, setCvvError] = useState('');
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -30,14 +47,32 @@ export function Checkout() {
     return <Navigate to="/cart" replace />;
   }
 
+  // Format expiry MM/YY
+  const handleExpiryChange = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 4);
+    if (digits.length >= 3) {
+      setCardExpiry(digits.slice(0, 2) + '/' + digits.slice(2));
+    } else {
+      setCardExpiry(digits);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;   // chặn double-submit (double-click / Enter liên tục)
     setError('');
+    setCvvError('');
 
     if (!address.trim()) {
       setError('Vui lòng nhập địa chỉ giao hàng.');
       return;
+    }
+
+    if (paymentMethod === 'transfer') {
+      if (cardCvv.length < 3) {
+        setCvvError('Vui lòng nhập mã CVV hợp lệ (3 chữ số).');
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -144,13 +179,173 @@ export function Checkout() {
                 <div className="flex flex-col space-y-3">
                   <label className={`flex items-center space-x-3 border-2 p-4 rounded-xl cursor-pointer transition-all ${paymentMethod === 'cod' ? 'border-violet-500 bg-violet-50/50' : 'border-slate-100 hover:border-violet-200 hover:bg-slate-50'}`}>
                     <input type="radio" name="payment" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="w-5 h-5 text-violet-600 focus:ring-violet-500 border-slate-300" />
-                    <span className="font-semibold text-slate-700">Thanh toán khi nhận hàng (COD)</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🚚</span>
+                      <span className="font-semibold text-slate-700">Thanh toán khi nhận hàng (COD)</span>
+                    </div>
                   </label>
                   <label className={`flex items-center space-x-3 border-2 p-4 rounded-xl cursor-pointer transition-all ${paymentMethod === 'transfer' ? 'border-violet-500 bg-violet-50/50' : 'border-slate-100 hover:border-violet-200 hover:bg-slate-50'}`}>
                     <input type="radio" name="payment" checked={paymentMethod === 'transfer'} onChange={() => setPaymentMethod('transfer')} className="w-5 h-5 text-violet-600 focus:ring-violet-500 border-slate-300" />
-                    <span className="font-semibold text-slate-700">Chuyển khoản ngân hàng</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💳</span>
+                      <span className="font-semibold text-slate-700">Thẻ ngân hàng / Chuyển khoản</span>
+                    </div>
                   </label>
                 </div>
+
+                {/* ── UI Thẻ Ngân Hàng Giả ── */}
+                <AnimatePresence>
+                  {paymentMethod === 'transfer' && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.3 }}
+                      className="space-y-4 pt-1"
+                    >
+                      {/* Thẻ 3D Flip */}
+                      <div
+                        className="relative mx-auto"
+                        style={{ width: '100%', maxWidth: 340, height: 190, perspective: 1000 }}
+                      >
+                        <div
+                          style={{
+                            width: '100%', height: '100%',
+                            transition: 'transform 0.6s cubic-bezier(.4,2,.6,1)',
+                            transformStyle: 'preserve-3d',
+                            transform: isCardFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                            position: 'relative'
+                          }}
+                        >
+                          {/* Mặt trước thẻ */}
+                          <div
+                            style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+                            className="absolute inset-0 rounded-2xl shadow-2xl overflow-hidden"
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700" />
+                            {/* Pattern */}
+                            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '30px 30px' }} />
+                            <div className="relative p-5 h-full flex flex-col justify-between text-white">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-[10px] font-semibold opacity-70 uppercase tracking-widest">Stationery Hub</p>
+                                  <p className="text-xs font-bold opacity-90">Thẻ Demo</p>
+                                </div>
+                                <div className="flex gap-1">
+                                  <div className="w-7 h-7 rounded-full bg-yellow-400 opacity-90" />
+                                  <div className="w-7 h-7 rounded-full bg-red-500 opacity-70 -ml-3" />
+                                </div>
+                              </div>
+                              {/* Chip */}
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-7 rounded-md bg-gradient-to-br from-yellow-300 to-yellow-500 shadow-inner flex items-center justify-center">
+                                  <div className="w-7 h-5 border border-yellow-600/40 rounded grid grid-cols-2 gap-0.5 p-0.5">
+                                    {[...Array(4)].map((_,i) => <div key={i} className="bg-yellow-600/30 rounded-sm" />)}
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Số thẻ */}
+                              <div>
+                                <p className="text-lg font-mono font-bold tracking-widest drop-shadow-sm">{cardNumber}</p>
+                              </div>
+                              {/* Thông tin dưới */}
+                              <div className="flex justify-between items-end">
+                                <div>
+                                  <p className="text-[9px] opacity-60 uppercase tracking-wider">Chủ thẻ</p>
+                                  <p className="text-sm font-bold tracking-wide">{cardHolder || 'TEN CHU THE'}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[9px] opacity-60 uppercase tracking-wider">Hết hạn</p>
+                                  <p className="text-sm font-bold font-mono">{cardExpiry || 'MM/YY'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Mặt sau thẻ */}
+                          <div
+                            style={{
+                              backfaceVisibility: 'hidden',
+                              WebkitBackfaceVisibility: 'hidden',
+                              transform: 'rotateY(180deg)'
+                            }}
+                            className="absolute inset-0 rounded-2xl shadow-2xl overflow-hidden"
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900" />
+                            <div className="relative h-full flex flex-col justify-between">
+                              <div className="mt-6 w-full h-10 bg-slate-950" />
+                              <div className="px-5 pb-6 space-y-3">
+                                <div className="flex items-center justify-end gap-3">
+                                  <span className="text-[10px] text-slate-400 uppercase tracking-wider">CVV</span>
+                                  <div className="bg-white rounded px-3 py-1.5 flex-1 text-center">
+                                    <span className="font-mono font-bold text-slate-800 tracking-widest text-sm">
+                                      {cardCvv ? '•'.repeat(cardCvv.length) : '•••'}
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-[9px] text-slate-500 text-center leading-relaxed">
+                                  Đây là thẻ demo dùng cho mục đích minh hoạ. Không sử dụng thông tin thẻ thật.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Form nhập thông tin thẻ */}
+                      <div className="space-y-3 bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Số thẻ</label>
+                          <Input
+                            value={cardNumber}
+                            disabled
+                            className="font-mono tracking-widest bg-white text-slate-400 cursor-not-allowed"
+                          />
+                          <p className="text-[10px] text-slate-400">* Số thẻ được tạo tự động (demo)</p>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tên chủ thẻ</label>
+                          <Input
+                            value={cardHolder}
+                            onChange={e => setCardHolder(e.target.value.toUpperCase())}
+                            placeholder="TEN CHU THE"
+                            className="font-semibold uppercase tracking-wide focus-visible:ring-violet-500"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Ngày hết hạn</label>
+                            <Input
+                              value={cardExpiry}
+                              onChange={e => handleExpiryChange(e.target.value)}
+                              placeholder="MM/YY"
+                              maxLength={5}
+                              className="font-mono focus-visible:ring-violet-500"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Mã CVV</label>
+                            <Input
+                              value={cardCvv}
+                              onChange={e => {
+                                const v = e.target.value.replace(/\D/g, '').slice(0, 3);
+                                setCardCvv(v);
+                                setCvvError('');
+                              }}
+                              onFocus={() => setIsCardFlipped(true)}
+                              onBlur={() => setIsCardFlipped(false)}
+                              placeholder="•••"
+                              maxLength={3}
+                              type="password"
+                              className={`font-mono text-center focus-visible:ring-violet-500 ${cvvError ? 'border-rose-400 ring-1 ring-rose-400' : ''}`}
+                            />
+                            {cvvError && <p className="text-[10px] text-rose-500 font-medium">{cvvError}</p>}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               {error && (
