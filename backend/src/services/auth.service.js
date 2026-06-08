@@ -402,6 +402,14 @@ export async function forgotPassword({ email }) {
   // 4. Gửi email bất đồng bộ — tránh timing attack (user enumeration) và tăng tốc độ phản hồi
   const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${rawToken}`;
 
+  // In link reset ra console ở môi trường dev để dễ dàng test
+  if (env.NODE_ENV === 'development') {
+    console.log('\n==================================================');
+    console.log('🔑 [DEV ONLY] LINK RESET MẬT KHẨU CỦA USER:', user.email);
+    console.log(resetUrl);
+    console.log('==================================================\n');
+  }
+
   sendPasswordResetEmail({
     to:       user.email,
     name:     user.name,
