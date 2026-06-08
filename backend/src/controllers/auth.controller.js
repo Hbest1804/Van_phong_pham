@@ -4,10 +4,11 @@ import { env } from '../config/env.js';
 
 // Cookie options dùng chung — maxAge đồng bộ với JWT_REFRESH_EXPIRES_IN trong .env
 function refreshCookieOptions() {
+  const isProd = env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure:   env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure:   isProd,
+    sameSite: isProd ? 'none' : 'strict', // 'none' in production to allow cross-site cookie transmission for Vercel frontend
     maxAge:   authService.refreshCookieMaxAge(),
   };
 }
