@@ -418,10 +418,15 @@ export async function forgotPassword({ email }) {
     });
   } catch (err) {
     console.error('[auth.service] Lỗi gửi email reset password:', err.message);
-    throw new AppError(
-      `Gửi email thất bại: ${err.message}. Vui lòng kiểm tra cấu hình SMTP trong file .env.`,
-      500
-    );
+    if (env.NODE_ENV === 'development') {
+      console.warn('⚠️ [DEV ONLY] Đã bỏ qua lỗi gửi email vì đang chạy ở môi trường development.');
+      console.warn('⚠️ Bạn có thể lấy link reset mật khẩu được in ở phía trên để tiến hành reset.');
+    } else {
+      throw new AppError(
+        `Gửi email thất bại: ${err.message}. Vui lòng kiểm tra cấu hình SMTP trong file .env.`,
+        500
+      );
+    }
   }
 }
 
