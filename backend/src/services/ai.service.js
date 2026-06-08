@@ -223,7 +223,7 @@ Quy tắc ứng xử và tư vấn:
   // 6. Gọi Gemini API
   let aiResponseText = '';
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
     
     const response = await fetch(geminiUrl, {
       method: 'POST',
@@ -518,7 +518,7 @@ Quy tắc tìm kiếm và định dạng phản hồi:
   // 3. Gọi Gemini API
   let matchedIds = [];
   try {
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${env.GEMINI_API_KEY}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
     
     const response = await fetch(geminiUrl, {
       method: 'POST',

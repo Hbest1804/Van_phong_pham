@@ -22,7 +22,26 @@ const app = express();
 // ── Middleware ────────────────────────────────────────────────────────────────
 
 app.use(cors({
-  origin: env.FRONTEND_URL,
+  origin: (origin, callback) => {
+    // Cho phép các request không có origin (như Postman, mobile app hoặc curl)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      env.FRONTEND_URL,
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+
+    const isAllowed = allowedOrigins.includes(origin) || 
+                      origin.endsWith('.vercel.app') || 
+                      origin.startsWith('http://localhost:');
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true, // cho phép gửi cookie cross-origin
 }));
 
