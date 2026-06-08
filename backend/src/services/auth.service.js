@@ -410,13 +410,19 @@ export async function forgotPassword({ email }) {
     console.log('==================================================\n');
   }
 
-  sendPasswordResetEmail({
-    to:       user.email,
-    name:     user.name,
-    resetUrl,
-  }).catch((err) => {
+  try {
+    await sendPasswordResetEmail({
+      to:       user.email,
+      name:     user.name,
+      resetUrl,
+    });
+  } catch (err) {
     console.error('[auth.service] Lỗi gửi email reset password:', err.message);
-  });
+    throw new AppError(
+      `Gửi email thất bại: ${err.message}. Vui lòng kiểm tra cấu hình SMTP trong file .env.`,
+      500
+    );
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
