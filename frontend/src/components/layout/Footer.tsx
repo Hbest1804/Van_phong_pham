@@ -59,7 +59,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li className="flex items-start">
                 <MapPin className="w-5 h-5 text-indigo-500 mr-2 shrink-0" />
-                <span className="text-slate-500 text-sm">123 Đường Sáng Tạo, Quận Thiết Kế, TP. Phép Thuật</span>
+                <span className="text-slate-500 text-sm">41 Lê Duẩn Đà Nẵng</span>
               </li>
               <li className="flex items-center">
                 <Phone className="w-5 h-5 text-indigo-500 mr-2 shrink-0" />
@@ -75,7 +75,7 @@ export function Footer() {
 
         <div className="border-t border-slate-200 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-slate-500 text-sm text-center md:text-left">
-            &copy; {new Date().getFullYear()} Stationery Hub. Mọi quyền được bảo lưu.
+            &copy; {new Date().getFullYear()} Huy Hoàng. Mọi quyền được bảo lưu.
           </p>
           <div className="flex gap-4 items-center">
             <span className="text-sm font-medium text-slate-500">Thanh toán an toàn với:</span>

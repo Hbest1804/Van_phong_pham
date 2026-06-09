@@ -33,7 +33,7 @@ export function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center space-x-1 sm:space-x-2 shrink-0">
           <span className="text-sm sm:text-xl md:text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600 whitespace-nowrap">
-            VPP Thiên Đường
+            VPP Huy Hoàng
           </span>
         </Link>
         <div className="flex-1 max-w-[140px] sm:max-w-md mx-2 sm:mx-6">
