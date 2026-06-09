@@ -189,7 +189,7 @@ export async function chatWithAI(userId, guestSessionId, sessionId, message) {
   }).join('\n');
 
   // 5. Chuẩn bị system instruction và nội dung hội thoại
-  const systemInstruction = `Bạn là Trợ lý Tư vấn Sản phẩm Văn phòng Phẩm chuyên nghiệp, thông minh và cực kỳ thân thiện của cửa hàng "Thiên đường văn phòng phẩm".
+  const systemInstruction = `Bạn là Trợ lý Tư vấn Sản phẩm Văn phòng Phẩm chuyên nghiệp, thông minh và cực kỳ thân thiện của cửa hàng "Văn phòng phẩm Huy Hoàng".
 Nhiệm vụ của bạn là lắng nghe nhu cầu của khách hàng, giải đáp thắc mắc và tư vấn, gợi ý sản phẩm phù hợp từ kho hàng có sẵn.
 
 Dưới đây là danh sách sản phẩm văn phòng phẩm hiện có trong cửa hàng:
