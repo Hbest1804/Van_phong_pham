@@ -10,7 +10,7 @@ export function Footer() {
           {/* Brand & Intro */}
           <div className="space-y-4">
             <h3 className="text-2xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-indigo-600">
-              Stationery Hub
+              Văn phòng phẩm Huy Hoàng
             </h3>
             <p className="text-slate-500 text-sm leading-relaxed">
               Điểm đến lý tưởng cho những người đam mê văn phòng phẩm, nghệ sĩ và sinh viên. Khám phá không gian sáng tạo với những sản phẩm chất lượng nhất.
