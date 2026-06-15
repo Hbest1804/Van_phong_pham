@@ -129,7 +129,7 @@ export function Checkout() {
           </svg>
         </motion.div>
         <h1 className="text-3xl font-black mb-4 text-slate-800">Đặt hàng thành công!</h1>
-        <p className="text-slate-500 mb-8 text-lg">Cảm ơn bạn đã mua sắm tại Stationery Hub. Đơn hàng của bạn đang được xử lý.</p>
+        <p className="text-slate-500 mb-8 text-lg">Cảm ơn bạn đã mua sắm tại Văn phòng phẩm Huy Hoàng. Đơn hàng của bạn đang được xử lý.</p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button size="lg" className="rounded-xl px-10 shadow-lg" onClick={() => navigate('/profile')}>Xem đơn hàng của tôi</Button>
           <Button size="lg" variant="outline" className="rounded-xl px-10 border-slate-200 text-slate-600 hover:bg-slate-50" onClick={() => navigate(-1)}>← Quay lại</Button>
@@ -237,7 +237,7 @@ export function Checkout() {
                             <div className="relative p-5 h-full flex flex-col justify-between text-white">
                               <div className="flex justify-between items-start">
                                 <div>
-                                  <p className="text-[10px] font-semibold opacity-70 uppercase tracking-widest">Stationery Hub</p>
+                                  <p className="text-[10px] font-semibold opacity-70 uppercase tracking-widest">VPP Huy Hoàng</p>
                                   <p className="text-xs font-bold opacity-90">Thẻ Demo</p>
                                 </div>
                                 <div className="flex gap-1">

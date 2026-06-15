@@ -14,9 +14,9 @@ function extractKeywords(text) {
   const normalized = text.toLowerCase()
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, ' ')
     .trim();
-  
+
   const words = normalized.split(/\s+/);
-  
+
   const stopWords = new Set([
     'tôi', 'em', 'mình', 'chúng', 'ta', 'bạn', 'quý', 'khách', 'anh', 'chị',
     'muốn', 'cần', 'tìm', 'mua', 'xem', 'hỏi', 'tư', 'vấn', 'giới', 'thiệu',
@@ -31,7 +31,7 @@ function extractKeywords(text) {
   const keywords = words
     .map(w => w.trim())
     .filter(w => w.length > 1 && !stopWords.has(w));
-  
+
   return [...new Set(keywords)];
 }
 
@@ -46,6 +46,21 @@ function extractKeywords(text) {
 export async function chatWithAI(userId, guestSessionId, sessionId, message) {
   if (!message || message.trim() === '') {
     throw new AppError('Tin nhắn không được để trống.', 400);
+  }
+
+  // Bản đồ từ khóa cấm và các đường dẫn chính sách tương ứng
+  const BANNED_MAP = {
+    'dm': 'https://dichvucong.bocongan.gov.vn/?home=1', // Đặt link chính sách cho từ khóa này ở đây
+    'hàng cấm': 'https://dichvucong.bocongan.gov.vn/?home=1', // Đặt link chính sách cho từ khóa này ở đây
+  };
+
+  const lowerMessage = message.toLowerCase();
+  // Tìm từ khóa đầu tiên bị vi phạm trong tin nhắn
+  const violatedWord = Object.keys(BANNED_MAP).find(word => lowerMessage.includes(word));
+
+  if (violatedWord) {
+    const policyUrl = BANNED_MAP[violatedWord] || '';
+    throw new AppError(`Nội dung bạn yêu cầu vi phạm chính sách của chúng tôi (${violatedWord}). Vui lòng tham khảo tại: ${policyUrl}`, 400);
   }
 
   let activeSessionId = sessionId;
@@ -224,7 +239,7 @@ Quy tắc ứng xử và tư vấn:
   let aiResponseText = '';
   try {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
-    
+
     const response = await fetch(geminiUrl, {
       method: 'POST',
       headers: {
@@ -519,7 +534,7 @@ Quy tắc tìm kiếm và định dạng phản hồi:
   let matchedIds = [];
   try {
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${env.GEMINI_API_KEY}`;
-    
+
     const response = await fetch(geminiUrl, {
       method: 'POST',
       headers: {

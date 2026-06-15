@@ -226,6 +226,11 @@ export function FloatingAiChat() {
 
     let cleanText = safeText.replace(/\[ID:\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi, '');
     cleanText = cleanText.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+    
+    // Nhận diện URL và chuyển đổi thành thẻ <a> click được
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    cleanText = cleanText.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-violet-600 hover:underline break-all font-semibold">$1</a>');
+
     const lines = cleanText.split('\n');
     const processedLines = lines.map(line => {
       const trimmed = line.trim();

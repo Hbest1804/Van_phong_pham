@@ -12,8 +12,8 @@ interface StoreContextType {
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
-  addCategory: (name: string, description?: string) => Promise<void>;
-  updateCategory: (id: string, name: string) => Promise<void>;
+  addCategory: (name: string, description?: string) => Promise<any>;
+  updateCategory: (id: string, name: string, description?: string) => Promise<any>;
   deleteCategory: (id: string) => Promise<void>;
   addOrder: (order: Order) => void;
   updateOrderStatus: (id: string, status: Order['status']) => void;
@@ -120,26 +120,24 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       const res = await categoriesApi.createCategory({ name, description });
       if (res.success && res.data) {
         setCategories(prev => [...prev, res.data!]);
-      } else {
-        alert(res.message || 'Lỗi thêm danh mục');
       }
+      return res;
     } catch (err) {
       console.error('Lỗi thêm danh mục:', err);
-      alert('Lỗi kết nối khi thêm danh mục');
+      return { success: false, message: 'Lỗi kết nối khi thêm danh mục' };
     }
   };
 
-  const updateCategory = async (id: string, name: string) => {
+  const updateCategory = async (id: string, name: string, description?: string) => {
     try {
-      const res = await categoriesApi.updateCategory(id, { name });
+      const res = await categoriesApi.updateCategory(id, { name, description });
       if (res.success && res.data) {
         setCategories(prev => prev.map(c => c.id === id ? res.data! : c));
-      } else {
-        alert(res.message || 'Lỗi cập nhật danh mục');
       }
+      return res;
     } catch (err) {
       console.error('Lỗi cập nhật danh mục:', err);
-      alert('Lỗi kết nối khi cập nhật danh mục');
+      return { success: false, message: 'Lỗi kết nối khi cập nhật danh mục' };
     }
   };
 
