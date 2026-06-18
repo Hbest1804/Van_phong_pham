@@ -93,29 +93,29 @@ const RevenueTooltip = ({ active, payload, label }: any) => {
 // ── Order Status Badge ────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending:   { label: 'Chờ xử lý',  color: 'text-amber-700',   bg: 'bg-amber-100'  },
-  shipping:  { label: 'Đang giao',  color: 'text-blue-700',    bg: 'bg-blue-100'   },
-  completed: { label: 'Hoàn thành', color: 'text-emerald-700', bg: 'bg-emerald-100'},
-  cancelled: { label: 'Đã huỷ',    color: 'text-red-700',     bg: 'bg-red-100'    },
+  pending: { label: 'Chờ xử lý', color: 'text-amber-700', bg: 'bg-amber-100' },
+  shipping: { label: 'Đang giao', color: 'text-blue-700', bg: 'bg-blue-100' },
+  completed: { label: 'Hoàn thành', color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  cancelled: { label: 'Đã huỷ', color: 'text-red-700', bg: 'bg-red-100' },
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function Dashboard() {
   // ── State ──────────────────────────────────────────────────────────────────
-  const [overview, setOverview]       = useState<DashboardOverviewData | null>(null);
+  const [overview, setOverview] = useState<DashboardOverviewData | null>(null);
   const [revenueData, setRevenueData] = useState<RevenueByPeriodData | null>(null);
   const [topProducts, setTopProducts] = useState<TopProductItem[]>([]);
 
-  const [loadingOverview, setLoadingOverview]     = useState(true);
-  const [loadingRevenue, setLoadingRevenue]       = useState(true);
-  const [loadingTopProd, setLoadingTopProd]       = useState(true);
-  const [errorOverview, setErrorOverview]         = useState<string | null>(null);
+  const [loadingOverview, setLoadingOverview] = useState(true);
+  const [loadingRevenue, setLoadingRevenue] = useState(true);
+  const [loadingTopProd, setLoadingTopProd] = useState(true);
+  const [errorOverview, setErrorOverview] = useState<string | null>(null);
 
   // Controls
-  const [revenueGroupBy, setRevenueGroupBy]       = useState<'month' | 'day'>('month');
-  const [topSortBy, setTopSortBy]                 = useState<'quantity' | 'revenue'>('quantity');
-  const [topLimit, setTopLimit]                   = useState(10);
+  const [revenueGroupBy, setRevenueGroupBy] = useState<'month' | 'day'>('month');
+  const [topSortBy, setTopSortBy] = useState<'quantity' | 'revenue'>('quantity');
+  const [topLimit, setTopLimit] = useState(10);
 
   // ── Fetch functions ────────────────────────────────────────────────────────
 
@@ -268,11 +268,10 @@ export function Dashboard() {
                 <button
                   key={g}
                   onClick={() => setRevenueGroupBy(g)}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                    revenueGroupBy === g
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${revenueGroupBy === g
                       ? 'bg-white text-slate-900 shadow-sm'
                       : 'text-slate-500 hover:text-slate-700'
-                  }`}
+                    }`}
                 >
                   {g === 'month' ? 'Theo tháng' : 'Theo ngày'}
                 </button>
@@ -374,12 +373,11 @@ export function Dashboard() {
                 {topProducts.map(p => (
                   <div key={p.productId} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-slate-50 transition-colors">
                     {/* Rank badge */}
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                      p.rank === 1 ? 'bg-amber-100 text-amber-700' :
-                      p.rank === 2 ? 'bg-slate-200 text-slate-600' :
-                      p.rank === 3 ? 'bg-orange-100 text-orange-700' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${p.rank === 1 ? 'bg-amber-100 text-amber-700' :
+                        p.rank === 2 ? 'bg-slate-200 text-slate-600' :
+                          p.rank === 3 ? 'bg-orange-100 text-orange-700' :
+                            'bg-slate-100 text-slate-500'
+                      }`}>
                       {p.rank}
                     </div>
                     {/* Info */}

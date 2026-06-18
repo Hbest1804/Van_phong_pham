@@ -19,30 +19,43 @@ tttn/
 
 ## 🏗️ Kiến trúc Hệ thống
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   CLIENT (Browser)                  │
-│              ReactJS SPA — Port 3000                │
-└─────────────────────┬───────────────────────────────┘
-                      │ HTTP REST API  (/api/v1/*)
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│              NGINX (Reverse Proxy)                  │
-│   /api/* → backend:5000   /  → SPA index.html      │
-└─────────────────────┬───────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│            BACKEND (Node.js / Express)              │
-│                    Port 5000                        │
-│  Routes → Middlewares → Controllers → Services      │
-└─────────────────────┬───────────────────────────────┘
-                      │ Supabase JS Client
-                      ▼
-┌─────────────────────────────────────────────────────┐
-│                  SUPABASE (BaaS)                    │
-│   PostgreSQL Database │ Auth │ Storage (Images)     │
-└─────────────────────────────────────────────────────┘
+![Sơ đồ Kiến trúc Hệ thống](docs/system_architecture.png)
+
+### Sơ đồ luồng dữ liệu
+
+```mermaid
+flowchart TD
+    Browser["🌐 NGƯỜI DÙNG / TRÌNH DUYỆT\nReactJS SPA — Port 3000"]
+
+    subgraph Docker["🐳 Docker Compose"]
+        Nginx["⚡ NGINX Reverse Proxy\nPort 80\n/api/* → backend:5000\n/ → SPA index.html"]
+
+        subgraph Backend["⚙️ BACKEND — Node.js / Express (Port 5000)"]
+            Routes["Routes"]
+            Middlewares["Middlewares\n(Auth / Validate / Upload)"]
+            Controllers["Controllers"]
+            Services["Services\n(Business Logic)"]
+            Routes --> Middlewares --> Controllers --> Services
+        end
+
+        FrontendBuilder["📦 Frontend Builder\n(Build React → Volume)"]
+    end
+
+    subgraph Supabase["☁️ SUPABASE (BaaS)"]
+        DB[("🗄️ PostgreSQL\nusers / products\ncategories / cart_items / orders")]
+        Storage["🖼️ Storage\n(Product Images)"]
+    end
+
+    GeminiAI["🤖 Google Gemini AI\n(AI Advisor / Semantic Search)"]
+    SMTP["📧 SMTP Gmail\n(Email: Reset Password)"]
+
+    Browser -- "HTTP REST /api/v1/*" --> Nginx
+    Nginx -- "Proxy Pass" --> Backend
+    FrontendBuilder -- "Build dist → Volume" --> Nginx
+    Services -- "Supabase JS Client" --> DB
+    Services -- "File Upload" --> Storage
+    Services -- "Gemini API" --> GeminiAI
+    Services -- "Nodemailer" --> SMTP
 ```
 
 **Luồng xử lý Request:**
