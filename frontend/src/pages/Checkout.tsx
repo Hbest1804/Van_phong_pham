@@ -10,14 +10,17 @@ import { PaymentMethod } from '../types';
 import { ordersApi } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Sinh số thẻ giả 16 chữ số một lần duy nhất
-const generateFakeCardNumber = () => {
+// Sinh số thẻ giả 16 chữ số – cố định theo từng tài khoản (lưu localStorage)
+const getOrCreateCardNumber = (userId: string | number): string => {
+  const key = `fake_card_${userId}`;
+  const saved = localStorage.getItem(key);
+  if (saved) return saved;
   const prefix = ['4539', '4916', '5234', '5412', '3714', '6011'][Math.floor(Math.random() * 6)];
   const rest = Array.from({ length: 12 }, () => Math.floor(Math.random() * 10)).join('');
-  return (prefix + rest).replace(/(\d{4})(?=\d)/g, '$1 ');
+  const card = (prefix + rest).replace(/(\d{4})(?=\d)/g, '$1 ');
+  localStorage.setItem(key, card);
+  return card;
 };
-
-const FAKE_CARD_NUMBER = generateFakeCardNumber();
 
 export function Checkout() {
   const { user } = useAuth();
@@ -32,7 +35,7 @@ export function Checkout() {
   const [error, setError] = useState('');
 
   // State thẻ ngân hàng giả
-  const [cardNumber] = useState(FAKE_CARD_NUMBER);
+  const [cardNumber] = useState(() => getOrCreateCardNumber(user?.id ?? 'guest'));
   const [cardHolder, setCardHolder] = useState(user?.name?.toUpperCase() || '');
   const [cardExpiry, setCardExpiry] = useState('12/28');
   const [cardCvv, setCardCvv] = useState('');
