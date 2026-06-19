@@ -10,9 +10,9 @@ import { PaymentMethod } from '../types';
 import { ordersApi } from '../lib/api';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Sinh số thẻ giả 16 chữ số – cố định theo từng tài khoản (lưu localStorage)
-const getOrCreateCardNumber = (userId: string | number): string => {
-  const key = `fake_card_${userId}`;
+// Sinh số thẻ giả 16 chữ số – chỉ dùng cho admin (cố định theo tài khoản, lưu localStorage)
+const getOrCreateAdminCardNumber = (userId: string | number): string => {
+  const key = `fake_card_admin_${userId}`;
   const saved = localStorage.getItem(key);
   if (saved) return saved;
   const prefix = ['4539', '4916', '5234', '5412', '3714', '6011'][Math.floor(Math.random() * 6)];
@@ -34,8 +34,11 @@ export function Checkout() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
 
-  // State thẻ ngân hàng giả
-  const [cardNumber] = useState(() => getOrCreateCardNumber(user?.id ?? 'guest'));
+  // State thẻ ngân hàng
+  const isAdmin = user?.role === 'admin';
+  const [cardNumber, setCardNumber] = useState(() =>
+    isAdmin ? getOrCreateAdminCardNumber(user?.id ?? 'admin') : ''
+  );
   const [cardHolder, setCardHolder] = useState(user?.name?.toUpperCase() || '');
   const [cardExpiry, setCardExpiry] = useState('12/28');
   const [cardCvv, setCardCvv] = useState('');
@@ -72,6 +75,10 @@ export function Checkout() {
     }
 
     if (paymentMethod === 'transfer') {
+      if (!isAdmin && cardNumber.replace(/\s/g, '').length < 16) {
+        setError('Vui lòng nhập số thẻ hợp lệ (16 chữ số).');
+        return;
+      }
       if (!cardHolder.trim()) {
         setError('Vui lòng nhập tên chủ thẻ.');
         return;
@@ -308,12 +315,32 @@ export function Checkout() {
                       <div className="space-y-3 bg-slate-50/80 rounded-2xl p-4 border border-slate-100">
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Số thẻ</label>
-                          <Input
-                            value={cardNumber}
-                            disabled
-                            className="font-mono tracking-widest bg-white text-slate-400 cursor-not-allowed"
-                          />
-                          <p className="text-[10px] text-slate-400">* Số thẻ được tạo tự động (demo)</p>
+                          {isAdmin ? (
+                            <>
+                              <Input
+                                value={cardNumber}
+                                disabled
+                                className="font-mono tracking-widest bg-white text-slate-400 cursor-not-allowed"
+                              />
+                              <p className="text-[10px] text-slate-400">* Số thẻ cố định của tài khoản admin (demo)</p>
+                            </>
+                          ) : (
+                            <>
+                              <Input
+                                value={cardNumber}
+                                onChange={e => {
+                                  // Chỉ cho nhập số, format theo nhóm 4
+                                  const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+                                  const formatted = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+                                  setCardNumber(formatted);
+                                }}
+                                placeholder="0000 0000 0000 0000"
+                                maxLength={19}
+                                className="font-mono tracking-widest focus-visible:ring-violet-500"
+                              />
+                              <p className="text-[10px] text-slate-400">* Nhập số thẻ ngân hàng của bạn (16 chữ số)</p>
+                            </>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tên chủ thẻ</label>
