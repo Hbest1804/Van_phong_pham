@@ -1,5 +1,9 @@
-Danh_sach_Chuc_nang_va_API.docx
+# Ẩn tất cả file Word
+*.docx
 generate_docs.py
+
+# Docs folder
+docs/
 
 # Nginx config (ẩn khỏi git)
 nginx/
