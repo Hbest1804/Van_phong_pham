@@ -286,7 +286,7 @@ doc.add_paragraph()
 # ── SƠ ĐỒ HÌNH ẢNH ──────────────────────────────────────────
 add_heading(doc, 'Sơ đồ quy trình hoạt động:', level=3, color=(107, 114, 128))
 
-FLOWCHART_IMG = r'C:\Users\hnguy\.gemini\antigravity-ide\brain\f5332cc6-fcab-4590-a844-43fd782881b4\ai_flowchart_print_1781854131038.png'
+FLOWCHART_IMG = os.path.join(os.path.dirname(__file__), 'ai_flowchart_print_1781854131038.png')
 if os.path.exists(FLOWCHART_IMG):
     p_img = doc.add_paragraph()
     p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
