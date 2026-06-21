@@ -259,7 +259,7 @@ export function Checkout() {
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-7 rounded-md bg-gradient-to-br from-yellow-300 to-yellow-500 shadow-inner flex items-center justify-center">
                                   <div className="w-7 h-5 border border-yellow-600/40 rounded grid grid-cols-2 gap-0.5 p-0.5">
-                                    {[...Array(4)].map((_,i) => <div key={i} className="bg-yellow-600/30 rounded-sm" />)}
+                                    {[...Array(4)].map((_, i) => <div key={i} className="bg-yellow-600/30 rounded-sm" />)}
                                   </div>
                                 </div>
                               </div>
